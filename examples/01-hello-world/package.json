@@ -1,0 +1,24 @@
+{
+  "name": "hello-world-lambda",
+  "version": "1.0.0",
+  "description": "Simplest Serverless Framework example",
+  "main": "handler.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "offline": "serverless offline start",
+    "deploy": "serverless deploy",
+    "remove": "serverless remove"
+  },
+  "keywords": [
+    "serverless",
+    "aws",
+    "lambda",
+    "api-gateway"
+  ],
+  "author": "Jason",
+  "license": "MIT",
+  "devDependencies": {
+    "serverless": "^3.38.0",
+    "serverless-offline": "^13.1.0"
+  }
+}

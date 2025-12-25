@@ -1,0 +1,29 @@
+{
+  "name": "api-gateway-s3-lambda",
+  "version": "1.0.0",
+  "description": "API Gateway + S3 integration with Serverless Framework",
+  "main": "handler.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "offline": "serverless offline start",
+    "deploy": "serverless deploy",
+    "remove": "serverless remove"
+  },
+  "keywords": [
+    "serverless",
+    "aws",
+    "lambda",
+    "s3",
+    "api-gateway"
+  ],
+  "author": "Jason",
+  "license": "MIT",
+  "dependencies": {
+    "aws-sdk": "^2.1500.0"
+  },
+  "devDependencies": {
+    "serverless": "^3.38.0",
+    "serverless-offline": "^13.1.0",
+    "serverless-s3-local": "^0.6.59"
+  }
+}

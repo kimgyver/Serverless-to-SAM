@@ -1,0 +1,103 @@
+service: hello-world-lambda
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  region: us-east-1
+  stage: ${opt:stage, 'dev'}
+  
+  # 모든 Lambda 함수가 공유할 권한
+  iam:
+    role:
+      name: HelloWorldRole-${self:provider.stage}
+      statements:
+        # CloudWatch Logs (기본 필수)
+        - Effect: Allow
+          Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+          Resource: "*"
+  
+  # 모든 Lambda 함수가 접근할 환경변수
+  environment:
+    STAGE: ${self:provider.stage}
+    LOG_LEVEL: INFO
+    SERVICE_NAME: hello-world-lambda
+  
+  # 태그 (모든 리소스에 자동 추가)
+  tags:
+    Environment: ${self:provider.stage}
+    Service: HelloWorld
+    Owner: Jason
+
+# Lambda 함수들
+functions:
+  # 1️⃣ 가장 기본: 파라미터 없이 "Hello" 반환
+  sayHello:
+    handler: handlers/hello.helloHandler
+    description: Simplest Lambda - returns Hello
+    events:
+      - http:
+          path: hello
+          method: get
+          cors: true
+
+  # 2️⃣ 경로 파라미터 받기: GET /hello/{name}
+  greet:
+    handler: handlers/hello.greetHandler
+    description: Returns greeting with name parameter
+    events:
+      - http:
+          path: hello/{name}
+          method: get
+          cors: true
+          request:
+            parameters:
+              paths:
+                name: true
+
+  # 3️⃣ POST 본문 처리
+  createMessage:
+    handler: handlers/hello.createMessageHandler
+    description: Creates a message from POST body
+    events:
+      - http:
+          path: message
+          method: post
+          cors: true
+
+  # 4️⃣ 에러 처리 예제
+  divide:
+    handler: handlers/hello.divideHandler
+    description: Divides two numbers (error handling demo)
+    events:
+      - http:
+          path: divide/{a}/{b}
+          method: get
+          cors: true
+          request:
+            parameters:
+              paths:
+                a: true
+                b: true
+
+# 추가 리소스 (선택 - 이 예제에선 없음)
+# resources:
+#   Resources:
+#     MyTable:
+#       Type: AWS::DynamoDB::Table
+#       Properties:
+#         ...
+
+# 커스텀 설정 (선택)
+custom:
+  # serverless-offline 플러그인 설정
+  serverless-offline:
+    httpPort: 3000
+    websocketPort: 3001
+    lambdaPort: 3002
+
+# 플러그인 (로컬 테스트용)
+plugins:
+  - serverless-offline

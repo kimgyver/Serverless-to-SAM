@@ -1,0 +1,30 @@
+{
+  "name": "hello-world-sam",
+  "version": "1.0.0",
+  "description": "SAM Example 1: Hello World with HTTP API Gateway",
+  "main": "handlers/hello.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "sam build",
+    "local": "sam local start-api --port 3000",
+    "deploy": "sam deploy --guided",
+    "deploy-dev": "sam deploy --config-env dev",
+    "deploy-staging": "sam deploy --config-env staging",
+    "deploy-prod": "sam deploy --config-env prod"
+  },
+  "keywords": [
+    "aws",
+    "serverless",
+    "sam",
+    "lambda",
+    "api-gateway"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "dependencies": {
+    "aws-sdk": "^2.1400.0"
+  },
+  "devDependencies": {
+    "aws-sam-cli": "^1.80.0"
+  }
+}

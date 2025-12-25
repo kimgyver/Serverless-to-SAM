@@ -1,0 +1,240 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: 'SAM Example 1: Hello World - HTTP API Gateway + Lambda Functions'
+
+Parameters:
+  Stage:
+    Type: String
+    Default: dev
+    Description: Deployment stage (dev, staging, prod)
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+  
+  Environment:
+    Type: String
+    Default: development
+    Description: Environment name
+    AllowedValues:
+      - development
+      - staging
+      - production
+
+Globals:
+  Function:
+    # 모든 함수에 공통으로 적용되는 설정
+    Timeout: 10
+    MemorySize: 128
+    Runtime: nodejs18.x
+    Architectures:
+      - x86_64
+    Environment:
+      Variables:
+        STAGE: !Ref Stage
+        ENVIRONMENT: !Ref Environment
+        SERVICE_NAME: HelloWorldService
+        LOG_LEVEL: INFO
+
+Resources:
+  # ============================================
+  # IAM Role for Lambda Functions
+  # ============================================
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: CloudWatchLogs
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*'
+
+  # ============================================
+  # Lambda Functions
+  # ============================================
+  
+  # Function 1: SayHello - No parameters
+  SayHelloFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'hello-world-say-hello-${Stage}'
+      CodeUri: handlers/
+      Handler: hello.sayHello
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Environment:
+        Variables:
+          FUNCTION_NAME: SayHello
+      Events:
+        HttpEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref HelloWorldApi
+            Path: /say-hello
+            Method: GET
+      Tags:
+        Stage: !Ref Stage
+        Service: HelloWorldService
+
+  # Function 2: Greet - Path parameter
+  GreetFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'hello-world-greet-${Stage}'
+      CodeUri: handlers/
+      Handler: hello.greet
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Environment:
+        Variables:
+          FUNCTION_NAME: Greet
+      Events:
+        HttpEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref HelloWorldApi
+            Path: /greet/{name}
+            Method: GET
+      Tags:
+        Stage: !Ref Stage
+        Service: HelloWorldService
+
+  # Function 3: CreateMessage - POST with body
+  CreateMessageFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'hello-world-create-message-${Stage}'
+      CodeUri: handlers/
+      Handler: hello.createMessage
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Environment:
+        Variables:
+          FUNCTION_NAME: CreateMessage
+      Events:
+        HttpEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref HelloWorldApi
+            Path: /message
+            Method: POST
+      Tags:
+        Stage: !Ref Stage
+        Service: HelloWorldService
+
+  # Function 4: Divide - Error handling
+  DivideFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'hello-world-divide-${Stage}'
+      CodeUri: handlers/
+      Handler: hello.divide
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Environment:
+        Variables:
+          FUNCTION_NAME: Divide
+      Events:
+        HttpEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref HelloWorldApi
+            Path: /divide
+            Method: POST
+      Tags:
+        Stage: !Ref Stage
+        Service: HelloWorldService
+
+  # ============================================
+  # API Gateway
+  # ============================================
+  
+  HelloWorldApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: !Sub 'hello-world-api-${Stage}'
+      StageName: !Ref Stage
+      TracingEnabled: true
+      MethodSettings:
+        - ResourcePath: '/*'
+          HttpMethod: '*'
+          LoggingLevel: INFO
+          DataTraceEnabled: true
+          MetricsEnabled: true
+          ThrottleSettings:
+            BurstLimit: 100
+            RateLimit: 50
+      Tags:
+        Stage: !Ref Stage
+        Service: HelloWorldService
+
+  # ============================================
+  # CloudWatch Alarms (선택적)
+  # ============================================
+  
+  ApiErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'HelloWorldApi-Errors-${Stage}'
+      AlarmDescription: Alert when API Gateway returns 4xx or 5xx errors
+      MetricName: 4XXError
+      Namespace: AWS/ApiGateway
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 10
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: ApiName
+          Value: !Sub 'hello-world-api-${Stage}'
+        - Name: Stage
+          Value: !Ref Stage
+      TreatMissingData: notBreaching
+
+Outputs:
+  HelloWorldApiEndpoint:
+    Description: Hello World API endpoint URL
+    Value: !Sub 'https://${HelloWorldApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}'
+    Export:
+      Name: !Sub 'HelloWorldApi-${Stage}-Endpoint'
+
+  SayHelloFunctionArn:
+    Description: ARN of SayHello Lambda function
+    Value: !GetAtt SayHelloFunction.Arn
+    Export:
+      Name: !Sub 'SayHelloFunction-${Stage}-Arn'
+
+  GreetFunctionArn:
+    Description: ARN of Greet Lambda function
+    Value: !GetAtt GreetFunction.Arn
+    Export:
+      Name: !Sub 'GreetFunction-${Stage}-Arn'
+
+  CreateMessageFunctionArn:
+    Description: ARN of CreateMessage Lambda function
+    Value: !GetAtt CreateMessageFunction.Arn
+    Export:
+      Name: !Sub 'CreateMessageFunction-${Stage}-Arn'
+
+  DivideFunctionArn:
+    Description: ARN of Divide Lambda function
+    Value: !GetAtt DivideFunction.Arn
+    Export:
+      Name: !Sub 'DivideFunction-${Stage}-Arn'
+
+  LambdaExecutionRoleArn:
+    Description: ARN of Lambda Execution Role
+    Value: !GetAtt LambdaExecutionRole.Arn
+    Export:
+      Name: !Sub 'LambdaExecutionRole-${Stage}-Arn'

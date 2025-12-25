@@ -1,0 +1,32 @@
+{
+  "name": "api-gateway-s3-sam",
+  "version": "1.0.0",
+  "description": "SAM Example 2: API Gateway + S3 Integration",
+  "main": "handlers/s3.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "sam build",
+    "local": "sam local start-api --port 3000",
+    "local:s3": "npm run local -- --docker-network sam-learning",
+    "deploy": "sam deploy --guided",
+    "deploy-dev": "sam deploy --config-env dev",
+    "deploy-staging": "sam deploy --config-env staging",
+    "deploy-prod": "sam deploy --config-env prod"
+  },
+  "keywords": [
+    "aws",
+    "serverless",
+    "sam",
+    "lambda",
+    "api-gateway",
+    "s3"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "dependencies": {
+    "aws-sdk": "^2.1400.0"
+  },
+  "devDependencies": {
+    "aws-sam-cli": "^1.80.0"
+  }
+}

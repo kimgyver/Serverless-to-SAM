@@ -1,0 +1,163 @@
+service: api-gateway-s3-lambda
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  region: us-east-1
+  stage: ${opt:stage, 'dev'}
+
+  # 🔴 S3 접근 권한 추가
+  iam:
+    role:
+      name: ApiS3Role-${self:provider.stage}
+      statements:
+        # CloudWatch Logs (필수)
+        - Effect: Allow
+          Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+          Resource: "*"
+
+        # 🟢 S3 버킷 목록 조회 권한
+        - Effect: Allow
+          Action:
+            - s3:ListBucket
+          Resource: !GetAtt UploadBucket.Arn
+
+        # 🟢 S3 객체 읽기/쓰기 권한
+        - Effect: Allow
+          Action:
+            - s3:GetObject
+            - s3:PutObject
+            - s3:DeleteObject
+          Resource: !Sub "${UploadBucket.Arn}/*"
+
+  environment:
+    STAGE: ${self:provider.stage}
+    BUCKET_NAME: !Ref UploadBucket
+    BUCKET_REGION: ${self:provider.region}
+
+functions:
+  # API Gateway + S3 통합 핸들러들
+  listFiles:
+    handler: handlers/s3.listFilesHandler
+    description: List all files in S3 bucket
+    events:
+      - http:
+          path: files
+          method: get
+          cors: true
+
+  uploadFile:
+    handler: handlers/s3.uploadFileHandler
+    description: Generate pre-signed URL for uploading
+    events:
+      - http:
+          path: files/upload
+          method: post
+          cors: true
+
+  getFile:
+    handler: handlers/s3.getFileHandler
+    description: Generate pre-signed URL for downloading
+    events:
+      - http:
+          path: files/{filename}
+          method: get
+          cors: true
+          request:
+            parameters:
+              paths:
+                filename: true
+
+  deleteFile:
+    handler: handlers/s3.deleteFileHandler
+    description: Delete file from S3
+    events:
+      - http:
+          path: files/{filename}
+          method: delete
+          cors: true
+          request:
+            parameters:
+              paths:
+                filename: true
+
+  # 🟡 S3 이벤트 트리거: 파일 업로드 감지
+  processUpload:
+    handler: handlers/s3.processUploadHandler
+    description: Triggered when file is uploaded to S3
+    events:
+      # S3 에서 파일 업로드 이벤트 감지
+      - s3:
+          bucket: !Ref UploadBucket
+          event: s3:ObjectCreated:*
+          rules:
+            # uploads/ 폴더 아래만
+            - prefix: uploads/
+            # .json 파일만
+            - suffix: .json
+    # 이 함수는 API Gateway 트리거 없음 (S3 이벤트만)
+
+# 🔴 추가 AWS 리소스 정의
+resources:
+  Resources:
+    # S3 버킷 생성
+    UploadBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: api-s3-bucket-${self:provider.stage}-${aws:accountId}
+        VersioningConfiguration:
+          Status: Enabled
+        LifecycleConfiguration:
+          Rules:
+            # 30일 후 이전 버전 삭제 (비용 절감)
+            - Id: DeleteOldVersions
+              NoncurrentVersionExpirationInDays: 30
+              Status: Enabled
+
+    # S3 버킷 CORS 설정 (API 요청 허용)
+    UploadBucketCorsConfiguration:
+      Type: AWS::S3::BucketCorsConfiguration
+      Properties:
+        Bucket: !Ref UploadBucket
+        CorsConfiguration:
+          CorsRules:
+            - AllowedHeaders:
+                - "*"
+              AllowedMethods:
+                - GET
+                - PUT
+                - POST
+              AllowedOrigins:
+                - "*"
+              MaxAgeSeconds: 3000
+
+    # 🟡 S3 이벤트 트리거 설정 (Lambda를 S3 이벤트에 연결)
+    # 이건 resources에 정의하거나 processUpload의 events에 정의 (둘 다 같은 결과)
+
+  # 출력: 배포 후 필요한 정보
+  Outputs:
+    UploadBucketName:
+      Description: S3 Bucket Name
+      Value: !Ref UploadBucket
+      Export:
+        Name: !Sub "${AWS::StackName}-BucketName"
+
+    UploadBucketArn:
+      Description: S3 Bucket ARN
+      Value: !GetAtt UploadBucket.Arn
+      Export:
+        Name: !Sub "${AWS::StackName}-BucketArn"
+
+plugins:
+  - serverless-offline
+  - serverless-s3-local
+
+custom:
+  s3:
+    # 로컬 S3 에뮬레이터 설정
+    host: 127.0.0.1
+    directory: ./.s3
+    port: 9000

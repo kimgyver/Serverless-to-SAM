@@ -1,0 +1,325 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: "SAM Example 2: API Gateway + S3 Integration"
+
+Parameters:
+  Stage:
+    Type: String
+    Default: dev
+    Description: Deployment stage (dev, staging, prod)
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+
+  BucketPrefix:
+    Type: String
+    Default: my-app
+    Description: Prefix for S3 bucket name
+    AllowedPattern: "^[a-z0-9-]{1,20}$"
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 256
+    Runtime: nodejs18.x
+    Architectures:
+      - x86_64
+    Environment:
+      Variables:
+        STAGE: !Ref Stage
+        BUCKET_NAME: !Ref FileUploadBucket
+        BUCKET_REGION: !Ref AWS::Region
+        SIGNED_URL_EXPIRY: "3600"
+        LOG_LEVEL: INFO
+
+Resources:
+  # ============================================
+  # S3 Bucket for File Upload
+  # ============================================
+
+  FileUploadBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${BucketPrefix}-uploads-${Stage}-${AWS::AccountId}"
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: Stage
+          Value: !Ref Stage
+        - Key: Service
+          Value: FileUploadService
+
+  # S3 Bucket Policy (restrict to Lambda only)
+  FileUploadBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref FileUploadBucket
+      PolicyText:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyInsecureConnections
+            Effect: Deny
+            Principal: "*"
+            Action: "s3:*"
+            Resource:
+              - !GetAtt FileUploadBucket.Arn
+              - !Sub "${FileUploadBucket.Arn}/*"
+            Condition:
+              Bool:
+                "aws:SecureTransport": "false"
+
+  # ============================================
+  # IAM Role for Lambda Functions
+  # ============================================
+
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: S3Access
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:ListBucket
+                  - s3:GetBucketLocation
+                Resource: !GetAtt FileUploadBucket.Arn
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                Resource: !Sub "${FileUploadBucket.Arn}/*"
+
+  # ============================================
+  # Lambda Functions
+  # ============================================
+
+  # Function 1: ListFiles
+  ListFilesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "s3-list-files-${Stage}"
+      CodeUri: handlers/
+      Handler: s3.listFiles
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Events:
+        ListFilesEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref S3ApiGateway
+            Path: /files
+            Method: GET
+      Tags:
+        Stage: !Ref Stage
+        Service: S3FileService
+
+  # Function 2: UploadFile (Pre-signed URL)
+  UploadFileFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "s3-upload-file-${Stage}"
+      CodeUri: handlers/
+      Handler: s3.uploadFile
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Events:
+        UploadEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref S3ApiGateway
+            Path: /files/upload
+            Method: POST
+      Tags:
+        Stage: !Ref Stage
+        Service: S3FileService
+
+  # Function 3: GetFile (Download with Pre-signed URL)
+  GetFileFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "s3-get-file-${Stage}"
+      CodeUri: handlers/
+      Handler: s3.getFile
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Events:
+        GetFileEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref S3ApiGateway
+            Path: /files/{key}
+            Method: GET
+      Tags:
+        Stage: !Ref Stage
+        Service: S3FileService
+
+  # Function 4: DeleteFile
+  DeleteFileFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "s3-delete-file-${Stage}"
+      CodeUri: handlers/
+      Handler: s3.deleteFile
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Events:
+        DeleteEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref S3ApiGateway
+            Path: /files/{key}
+            Method: DELETE
+      Tags:
+        Stage: !Ref Stage
+        Service: S3FileService
+
+  # Function 5: ProcessFileUpload (S3 Event Trigger)
+  ProcessUploadFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "s3-process-upload-${Stage}"
+      CodeUri: handlers/
+      Handler: s3.processUpload
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Events:
+        S3UploadEvent:
+          Type: S3
+          Properties:
+            Bucket: !Ref FileUploadBucket
+            Events: s3:ObjectCreated:*
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: prefix
+                    Value: uploads/
+                  - Name: suffix
+                    Value: .json
+      Tags:
+        Stage: !Ref Stage
+        Service: S3FileService
+
+  # ============================================
+  # API Gateway
+  # ============================================
+
+  S3ApiGateway:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: !Sub "s3-api-${Stage}"
+      StageName: !Ref Stage
+      TracingEnabled: true
+      MethodSettings:
+        - ResourcePath: "/*"
+          HttpMethod: "*"
+          LoggingLevel: INFO
+          DataTraceEnabled: true
+          MetricsEnabled: true
+          ThrottleSettings:
+            BurstLimit: 100
+            RateLimit: 50
+      Tags:
+        Stage: !Ref Stage
+        Service: S3FileService
+
+  # ============================================
+  # Permissions (S3 -> Lambda)
+  # ============================================
+
+  S3InvokeLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ProcessUploadFunction
+      Action: lambda:InvokeFunction
+      Principal: s3.amazonaws.com
+      SourceArn: !GetAtt FileUploadBucket.Arn
+      SourceAccount: !Ref AWS::AccountId
+
+  # ============================================
+  # CloudWatch Alarms
+  # ============================================
+
+  S3FunctionErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "S3Functions-Errors-${Stage}"
+      AlarmDescription: Alert when S3 Lambda functions have errors
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 5
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref ProcessUploadFunction
+      TreatMissingData: notBreaching
+
+Outputs:
+  S3ApiEndpoint:
+    Description: S3 API endpoint URL
+    Value: !Sub "https://${S3ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/${Stage}"
+    Export:
+      Name: !Sub "S3Api-${Stage}-Endpoint"
+
+  FileUploadBucketName:
+    Description: Name of the file upload S3 bucket
+    Value: !Ref FileUploadBucket
+    Export:
+      Name: !Sub "FileUploadBucket-${Stage}-Name"
+
+  FileUploadBucketArn:
+    Description: ARN of the file upload S3 bucket
+    Value: !GetAtt FileUploadBucket.Arn
+    Export:
+      Name: !Sub "FileUploadBucket-${Stage}-Arn"
+
+  ListFilesFunctionArn:
+    Description: ARN of ListFiles Lambda function
+    Value: !GetAtt ListFilesFunction.Arn
+    Export:
+      Name: !Sub "ListFilesFunction-${Stage}-Arn"
+
+  UploadFileFunctionArn:
+    Description: ARN of UploadFile Lambda function
+    Value: !GetAtt UploadFileFunction.Arn
+    Export:
+      Name: !Sub "UploadFileFunction-${Stage}-Arn"
+
+  GetFileFunctionArn:
+    Description: ARN of GetFile Lambda function
+    Value: !GetAtt GetFileFunction.Arn
+    Export:
+      Name: !Sub "GetFileFunction-${Stage}-Arn"
+
+  DeleteFileFunctionArn:
+    Description: ARN of DeleteFile Lambda function
+    Value: !GetAtt DeleteFileFunction.Arn
+    Export:
+      Name: !Sub "DeleteFileFunction-${Stage}-Arn"
+
+  ProcessUploadFunctionArn:
+    Description: ARN of ProcessUpload Lambda function
+    Value: !GetAtt ProcessUploadFunction.Arn
+    Export:
+      Name: !Sub "ProcessUploadFunction-${Stage}-Arn"
+
+  LambdaExecutionRoleArn:
+    Description: ARN of Lambda Execution Role
+    Value: !GetAtt LambdaExecutionRole.Arn
+    Export:
+      Name: !Sub "LambdaExecutionRole-${Stage}-Arn"
