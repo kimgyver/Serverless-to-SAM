@@ -1,6 +1,6 @@
-AWSTemplateFormatVersion: '2010-09-09'
+AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
-Description: 'SAM Example 1: Hello World - HTTP API Gateway + Lambda Functions'
+Description: "SAM Example 1: Hello World - HTTP API Gateway + Lambda Functions"
 
 Parameters:
   Stage:
@@ -11,7 +11,7 @@ Parameters:
       - dev
       - staging
       - prod
-  
+
   Environment:
     Type: String
     Default: development
@@ -44,7 +44,7 @@ Resources:
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
-        Version: '2012-10-17'
+        Version: "2012-10-17"
         Statement:
           - Effect: Allow
             Principal:
@@ -55,24 +55,24 @@ Resources:
       Policies:
         - PolicyName: CloudWatchLogs
           PolicyDocument:
-            Version: '2012-10-17'
+            Version: "2012-10-17"
             Statement:
               - Effect: Allow
                 Action:
                   - logs:CreateLogGroup
                   - logs:CreateLogStream
                   - logs:PutLogEvents
-                Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*'
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*"
 
   # ============================================
   # Lambda Functions
   # ============================================
-  
+
   # Function 1: SayHello - No parameters
   SayHelloFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub 'hello-world-say-hello-${Stage}'
+      FunctionName: !Sub "hello-world-say-hello-${Stage}"
       CodeUri: handlers/
       Handler: hello.sayHello
       Role: !GetAtt LambdaExecutionRole.Arn
@@ -94,7 +94,7 @@ Resources:
   GreetFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub 'hello-world-greet-${Stage}'
+      FunctionName: !Sub "hello-world-greet-${Stage}"
       CodeUri: handlers/
       Handler: hello.greet
       Role: !GetAtt LambdaExecutionRole.Arn
@@ -116,7 +116,7 @@ Resources:
   CreateMessageFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub 'hello-world-create-message-${Stage}'
+      FunctionName: !Sub "hello-world-create-message-${Stage}"
       CodeUri: handlers/
       Handler: hello.createMessage
       Role: !GetAtt LambdaExecutionRole.Arn
@@ -138,7 +138,7 @@ Resources:
   DivideFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub 'hello-world-divide-${Stage}'
+      FunctionName: !Sub "hello-world-divide-${Stage}"
       CodeUri: handlers/
       Handler: hello.divide
       Role: !GetAtt LambdaExecutionRole.Arn
@@ -159,22 +159,19 @@ Resources:
   # ============================================
   # API Gateway
   # ============================================
-  
+
   HelloWorldApi:
     Type: AWS::Serverless::Api
     Properties:
-      Name: !Sub 'hello-world-api-${Stage}'
+      Name: !Sub "hello-world-api-${Stage}"
       StageName: !Ref Stage
       TracingEnabled: true
       MethodSettings:
-        - ResourcePath: '/*'
-          HttpMethod: '*'
+        - ResourcePath: "/*"
+          HttpMethod: "*"
           LoggingLevel: INFO
           DataTraceEnabled: true
           MetricsEnabled: true
-          ThrottleSettings:
-            BurstLimit: 100
-            RateLimit: 50
       Tags:
         Stage: !Ref Stage
         Service: HelloWorldService
@@ -182,11 +179,11 @@ Resources:
   # ============================================
   # CloudWatch Alarms (선택적)
   # ============================================
-  
+
   ApiErrorAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmName: !Sub 'HelloWorldApi-Errors-${Stage}'
+      AlarmName: !Sub "HelloWorldApi-Errors-${Stage}"
       AlarmDescription: Alert when API Gateway returns 4xx or 5xx errors
       MetricName: 4XXError
       Namespace: AWS/ApiGateway
@@ -197,7 +194,7 @@ Resources:
       ComparisonOperator: GreaterThanOrEqualToThreshold
       Dimensions:
         - Name: ApiName
-          Value: !Sub 'hello-world-api-${Stage}'
+          Value: !Sub "hello-world-api-${Stage}"
         - Name: Stage
           Value: !Ref Stage
       TreatMissingData: notBreaching
@@ -205,36 +202,36 @@ Resources:
 Outputs:
   HelloWorldApiEndpoint:
     Description: Hello World API endpoint URL
-    Value: !Sub 'https://${HelloWorldApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}'
+    Value: !Sub "https://${HelloWorldApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}"
     Export:
-      Name: !Sub 'HelloWorldApi-${Stage}-Endpoint'
+      Name: !Sub "HelloWorldApi-${Stage}-Endpoint"
 
   SayHelloFunctionArn:
     Description: ARN of SayHello Lambda function
     Value: !GetAtt SayHelloFunction.Arn
     Export:
-      Name: !Sub 'SayHelloFunction-${Stage}-Arn'
+      Name: !Sub "SayHelloFunction-${Stage}-Arn"
 
   GreetFunctionArn:
     Description: ARN of Greet Lambda function
     Value: !GetAtt GreetFunction.Arn
     Export:
-      Name: !Sub 'GreetFunction-${Stage}-Arn'
+      Name: !Sub "GreetFunction-${Stage}-Arn"
 
   CreateMessageFunctionArn:
     Description: ARN of CreateMessage Lambda function
     Value: !GetAtt CreateMessageFunction.Arn
     Export:
-      Name: !Sub 'CreateMessageFunction-${Stage}-Arn'
+      Name: !Sub "CreateMessageFunction-${Stage}-Arn"
 
   DivideFunctionArn:
     Description: ARN of Divide Lambda function
     Value: !GetAtt DivideFunction.Arn
     Export:
-      Name: !Sub 'DivideFunction-${Stage}-Arn'
+      Name: !Sub "DivideFunction-${Stage}-Arn"
 
   LambdaExecutionRoleArn:
     Description: ARN of Lambda Execution Role
     Value: !GetAtt LambdaExecutionRole.Arn
     Export:
-      Name: !Sub 'LambdaExecutionRole-${Stage}-Arn'
+      Name: !Sub "LambdaExecutionRole-${Stage}-Arn"

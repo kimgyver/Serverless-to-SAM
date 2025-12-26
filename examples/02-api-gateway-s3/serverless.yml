@@ -23,7 +23,7 @@ provider:
         - Effect: Allow
           Action:
             - s3:ListBucket
-          Resource: !GetAtt UploadBucket.Arn
+          Resource: "arn:aws:s3:::api-s3-bucket"
 
         # 🟢 S3 객체 읽기/쓰기 권한
         - Effect: Allow
@@ -31,11 +31,11 @@ provider:
             - s3:GetObject
             - s3:PutObject
             - s3:DeleteObject
-          Resource: !Sub "${UploadBucket.Arn}/*"
+          Resource: "arn:aws:s3:::api-s3-bucket/*"
 
   environment:
     STAGE: ${self:provider.stage}
-    BUCKET_NAME: !Ref UploadBucket
+    BUCKET_NAME: api-s3-bucket
     BUCKET_REGION: ${self:provider.region}
 
 functions:
@@ -66,10 +66,6 @@ functions:
           path: files/{filename}
           method: get
           cors: true
-          request:
-            parameters:
-              paths:
-                filename: true
 
   deleteFile:
     handler: handlers/s3.deleteFileHandler
@@ -79,10 +75,6 @@ functions:
           path: files/{filename}
           method: delete
           cors: true
-          request:
-            parameters:
-              paths:
-                filename: true
 
   # 🟡 S3 이벤트 트리거: 파일 업로드 감지
   processUpload:
@@ -91,7 +83,7 @@ functions:
     events:
       # S3 에서 파일 업로드 이벤트 감지
       - s3:
-          bucket: !Ref UploadBucket
+          bucket: api-s3-bucket
           event: s3:ObjectCreated:*
           rules:
             # uploads/ 폴더 아래만
@@ -107,7 +99,7 @@ resources:
     UploadBucket:
       Type: AWS::S3::Bucket
       Properties:
-        BucketName: api-s3-bucket-${self:provider.stage}-${aws:accountId}
+        BucketName: api-s3-bucket
         VersioningConfiguration:
           Status: Enabled
         LifecycleConfiguration:
@@ -121,7 +113,7 @@ resources:
     UploadBucketCorsConfiguration:
       Type: AWS::S3::BucketCorsConfiguration
       Properties:
-        Bucket: !Ref UploadBucket
+        Bucket: api-s3-bucket
         CorsConfiguration:
           CorsRules:
             - AllowedHeaders:
@@ -136,20 +128,6 @@ resources:
 
     # 🟡 S3 이벤트 트리거 설정 (Lambda를 S3 이벤트에 연결)
     # 이건 resources에 정의하거나 processUpload의 events에 정의 (둘 다 같은 결과)
-
-  # 출력: 배포 후 필요한 정보
-  Outputs:
-    UploadBucketName:
-      Description: S3 Bucket Name
-      Value: !Ref UploadBucket
-      Export:
-        Name: !Sub "${AWS::StackName}-BucketName"
-
-    UploadBucketArn:
-      Description: S3 Bucket ARN
-      Value: !GetAtt UploadBucket.Arn
-      Export:
-        Name: !Sub "${AWS::StackName}-BucketArn"
 
 plugins:
   - serverless-offline
