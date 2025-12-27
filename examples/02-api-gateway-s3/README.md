@@ -68,7 +68,41 @@ npm run deploy
 serverless deploy --stage prod --region ap-southeast-2
 ```
 
-### 5️⃣ AWS 배포 후 실제 API 호출
+### 5️⃣ Stage 옵션 테스트 (중요!)
+
+```bash
+# dev 스테이지 (기본값)
+serverless deploy --stage dev
+
+# staging 스테이지 (중간 환경)
+serverless deploy --stage staging
+
+# prod 스테이지 (프로덕션)
+serverless deploy --stage prod
+```
+
+**각 stage의 차이:**
+
+| 옵션           | dev      | staging | prod   |
+| -------------- | -------- | ------- | ------ |
+| Lambda 메모리  | 256MB    | 512MB   | 1024MB |
+| Timeout        | 30s      | 60s     | 120s   |
+| 로그 보관기간  | 3일      | 7일     | 30일   |
+| S3 파일 보관   | 7일      | 15일    | 90일   |
+| 동시 실행 제한 | 무제한   | 100     | 500    |
+| XRay 트레이싱  | 비활성화 | 활성화  | 활성화 |
+
+**로컬 테스트:**
+
+```bash
+# dev 스테이지로 로컬 테스트
+serverless offline --stage dev
+
+# 다른 포트로 staging 테스트
+serverless offline --stage staging --httpPort 3001
+```
+
+### 6️⃣ AWS 배포 후 실제 API 호출
 
 ```bash
 # 배포 후 출력된 endpoint 사용
@@ -321,6 +355,95 @@ resources:
 - `!Ref UploadBucket` = 위에서 정의한 리소스 참조
 - `!GetAtt` = 리소스의 속성 가져오기
 - `${aws:accountId}` = AWS 계정 ID (Serverless 변수)
+
+### 4️⃣ Custom 섹션 (Serverless Framework 커스텀 변수)
+
+**`custom` 섹션이란?**
+
+- Serverless Framework의 커스텀 변수/설정 저장소
+- 어디서든 `${self:custom.xxx}` 문법으로 참조 가능
+- Stage별 환경 설정, 플러그인 설정 등을 중앙화
+
+```yaml
+custom:
+  # ============================================
+  # 1️⃣ 기본 설정
+  # ============================================
+  timestamp: ${file(./timestamp.js):timestamp}
+
+  # ============================================
+  # 2️⃣ Stage별 환경 설정 (dev, staging, prod)
+  # ============================================
+  stages:
+    dev:
+      memorySize: 256
+      timeout: 30
+      logRetentionInDays: 3
+      enableXRay: false
+
+    staging:
+      memorySize: 512
+      timeout: 60
+      logRetentionInDays: 7
+      enableXRay: true
+
+    prod:
+      memorySize: 1024
+      timeout: 120
+      logRetentionInDays: 30
+      enableXRay: true
+
+  # 현재 stage의 설정 자동 선택
+  currentStage: ${self:provider.stage}
+  stageConfig: ${self:custom.stages.${self:custom.currentStage}}
+
+  # ============================================
+  # 3️⃣ 로컬 S3 에뮬레이터 설정 (플러그인용)
+  # ============================================
+  s3:
+    host: 127.0.0.1
+    directory: ./.s3
+    port: 9000
+
+  # ============================================
+  # 4️⃣ S3 버킷 설정 (stage별 다름)
+  # ============================================
+  s3Bucket:
+    name: api-s3-bucket-${self:service}-${self:provider.stage}
+    lifecycleDays:
+      dev: 7 # 개발: 7일
+      staging: 15 # 스테이징: 15일
+      prod: 90 # 프로덕션: 90일
+    currentLifecycleDays: ${self:custom.s3Bucket.lifecycleDays.${self:custom.currentStage}}
+```
+
+**사용 예시:**
+
+```yaml
+# serverless.yml 어디서나 참조
+functions:
+  listFiles:
+    memorySize: ${self:custom.stageConfig.memorySize}
+    timeout: ${self:custom.stageConfig.timeout}
+
+resources:
+  Resources:
+    UploadBucket:
+      Properties:
+        BucketName: ${self:custom.s3Bucket.name}
+        LifecycleConfiguration:
+          Rules:
+            - NoncurrentVersionExpirationInDays: ${self:custom.s3Bucket.currentLifecycleDays}
+```
+
+**장점:**
+
+| 장점                | 예시                                                        |
+| ------------------- | ----------------------------------------------------------- |
+| Stage별 설정 중앙화 | dev/staging/prod 환경 변수 한 곳에서 관리                   |
+| 반복 제거 (DRY)     | 버킷 이름을 여러 곳에서 `${self:custom.s3Bucket.name}` 참조 |
+| 플러그인 설정       | serverless-s3-local, serverless-offline 등 설정 관리        |
+| 환경변수 주입       | `${self:custom.xxx}` → environment 또는 resources로 전달    |
 
 ### 5️⃣ Outputs (배포 결과)
 

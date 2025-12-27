@@ -43,6 +43,8 @@ functions:
   listFiles:
     handler: handlers/s3.listFilesHandler
     description: List all files in S3 bucket
+    memorySize: ${self:custom.stageConfig.memorySize}
+    timeout: ${self:custom.stageConfig.timeout}
     events:
       - http:
           path: files
@@ -52,6 +54,8 @@ functions:
   uploadFile:
     handler: handlers/s3.uploadFileHandler
     description: Generate pre-signed URL for uploading
+    memorySize: ${self:custom.stageConfig.memorySize}
+    timeout: ${self:custom.stageConfig.timeout}
     events:
       - http:
           path: files/upload
@@ -61,6 +65,8 @@ functions:
   getFile:
     handler: handlers/s3.getFileHandler
     description: Generate pre-signed URL for downloading
+    memorySize: ${self:custom.stageConfig.memorySize}
+    timeout: ${self:custom.stageConfig.timeout}
     events:
       - http:
           path: files/{filename}
@@ -70,6 +76,8 @@ functions:
   deleteFile:
     handler: handlers/s3.deleteFileHandler
     description: Delete file from S3
+    memorySize: ${self:custom.stageConfig.memorySize}
+    timeout: ${self:custom.stageConfig.timeout}
     events:
       - http:
           path: files/{filename}
@@ -80,6 +88,8 @@ functions:
   processUpload:
     handler: handlers/s3.processUploadHandler
     description: Triggered when file is uploaded to S3
+    memorySize: ${self:custom.stageConfig.memorySize}
+    timeout: ${self:custom.stageConfig.timeout}
     events:
       # S3 에서 파일 업로드 이벤트 감지
       - s3:
@@ -97,6 +107,8 @@ functions:
   processDelete:
     handler: handlers/s3.processDeleteHandler
     description: Triggered when file is deleted from S3
+    memorySize: ${self:custom.stageConfig.memorySize}
+    timeout: ${self:custom.stageConfig.timeout}
     events:
       # S3 에서 파일 삭제 이벤트 감지
       - s3:
@@ -114,14 +126,14 @@ resources:
     UploadBucket:
       Type: AWS::S3::Bucket
       Properties:
-        BucketName: api-s3-bucket-${self:service}-${self:provider.stage}
+        BucketName: ${self:custom.s3Bucket.name}
         VersioningConfiguration:
           Status: Enabled
         LifecycleConfiguration:
           Rules:
-            # 30일 후 이전 버전 삭제 (비용 절감)
+            # Stage별 다른 보관 기간 적용 (비용 절감)
             - Id: DeleteOldVersions
-              NoncurrentVersionExpirationInDays: 30
+              NoncurrentVersionExpirationInDays: ${self:custom.s3Bucket.currentLifecycleDays}
               Status: Enabled
 
 plugins:
@@ -129,9 +141,64 @@ plugins:
   - serverless-s3-local
 
 custom:
+  # ============================================
+  # 1️⃣ 기본 설정
+  # ============================================
   timestamp: ${file(./timestamp.js):timestamp}
+
+  # ============================================
+  # 2️⃣ Stage별 환경 설정 (dev, staging, prod)
+  # ============================================
+  stages:
+    dev:
+      memorySize: 256 # 개발: 저메모리
+      timeout: 30
+      logRetentionInDays: 3 # 로그 3일 보관
+      enableXRay: false
+
+    staging:
+      memorySize: 512 # 스테이징: 중간
+      timeout: 60
+      logRetentionInDays: 7
+      enableXRay: true
+
+    prod:
+      memorySize: 1024 # 프로덕션: 고메모리
+      timeout: 120
+      logRetentionInDays: 30
+      enableXRay: true
+
+  # 현재 stage의 설정 선택
+  currentStage: ${self:provider.stage}
+  stageConfig: ${self:custom.stages.${self:custom.currentStage}}
+
+  # ============================================
+  # 3️⃣ 로컬 S3 에뮬레이터 설정
+  # ============================================
   s3:
-    # 로컬 S3 에뮬레이터 설정
     host: 127.0.0.1
     directory: ./.s3
     port: 9000
+
+  # ============================================
+  # 4️⃣ API 설정 (프론트엔드용)
+  # ============================================
+  api:
+    name: ${self:service}-${self:provider.stage}
+    corsOrigins:
+      dev: "http://localhost:3000"
+      staging: "https://staging.example.com"
+      prod: "https://example.com"
+    currentCorsOrigin: ${self:custom.api.corsOrigins.${self:custom.currentStage}}
+
+  # ============================================
+  # 5️⃣ S3 버킷 설정
+  # ============================================
+  s3Bucket:
+    name: api-s3-bucket-${self:service}-${self:provider.stage}
+    # 파일 보관 기간 (stage별 다름)
+    lifecycleDays:
+      dev: 7 # 개발: 7일
+      staging: 15 # 스테이징: 15일
+      prod: 90 # 프로덕션: 90일
+    currentLifecycleDays: ${self:custom.s3Bucket.lifecycleDays.${self:provider.stage}}
