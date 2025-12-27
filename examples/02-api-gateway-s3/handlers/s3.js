@@ -130,7 +130,10 @@ exports.getFileHandler = async (event, context) => {
   });
 
   try {
-    const { filename } = event.pathParameters;
+    let { filename } = event.pathParameters;
+
+    // URL 디코딩
+    filename = decodeURIComponent(filename);
 
     if (!filename) {
       return createResponse(400, {
@@ -190,7 +193,10 @@ exports.deleteFileHandler = async (event, context) => {
   });
 
   try {
-    const { filename } = event.pathParameters;
+    let { filename } = event.pathParameters;
+
+    // URL 디코딩
+    filename = decodeURIComponent(filename);
 
     if (!filename) {
       return createResponse(400, {
@@ -284,5 +290,58 @@ exports.processUploadHandler = async (event, context) => {
   } catch (error) {
     log("ERROR", "Error in processUploadHandler", { error: error.message });
     throw error; // Lambda가 자동으로 재시도하도록
+  }
+};
+
+// ============================================
+// 5️⃣ S3 이벤트: 파일 삭제 감지
+// ============================================
+exports.processDeleteHandler = async (event, context) => {
+  log("INFO", "processDelete called", {
+    eventSource: event.Records?.[0]?.eventSource,
+    eventName: event.Records?.[0]?.eventName
+  });
+
+  try {
+    // S3 이벤트에서 삭제된 파일 정보 추출
+    const results = await Promise.all(
+      event.Records.map(async record => {
+        const bucket = record.s3.bucket.name;
+        const key = decodeURIComponent(
+          record.s3.object.key.replace(/\+/g, " ")
+        );
+
+        log("INFO", `File deleted from S3: ${key}`, {
+          bucket,
+          key,
+          eventTime: record.eventTime
+        });
+
+        // 여기서 삭제 후 처리 로직 수행
+        // 예: 데이터베이스 레코드 삭제, 캐시 무효화, 알림 전송 등
+
+        return {
+          status: "deleted",
+          bucket,
+          key,
+          deletedAt: new Date().toISOString()
+        };
+      })
+    );
+
+    log("INFO", "processDelete completed", {
+      deletedCount: results.length
+    });
+
+    return {
+      statusCode: 200,
+      body: JSON.stringify({
+        message: "Deleted files processed successfully",
+        results
+      })
+    };
+  } catch (error) {
+    log("ERROR", "Error in processDeleteHandler", { error: error.message });
+    throw error;
   }
 };

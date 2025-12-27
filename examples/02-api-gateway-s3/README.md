@@ -142,9 +142,154 @@ functions:
           rules:
             - prefix: uploads/
             - suffix: .json
+          existing: true # ⚠️ 중요: 여러 Lambda가 같은 버킷 참조할 때 필수
+
+  processDelete:
+    events:
+      - s3:
+          bucket: !Ref UploadBucket
+          event: s3:ObjectRemoved:*
+          existing: true # ⚠️ 중요: existing: true 필수!
 ```
 
-### 4️⃣ Resources 섹션 (CloudFormation)
+### ⚠️ S3 이벤트 트리거 설정 시 주의사항
+
+#### 1️⃣ `existing: true` 플래그 필수
+
+```yaml
+# ❌ 틀린 설정 (에러 발생)
+processUpload:
+  events:
+    - s3:
+        bucket: !Ref UploadBucket  # 버킷 참조
+        event: s3:ObjectCreated:*
+
+processDelete:
+  events:
+    - s3:
+        bucket: !Ref UploadBucket  # 같은 버킷 참조
+        event: s3:ObjectRemoved:*
+# → CloudFormation 에러: "bucket already exists in stack"
+
+# ✅ 올바른 설정
+processUpload:
+  events:
+    - s3:
+        bucket: !Ref UploadBucket
+        event: s3:ObjectCreated:*
+        existing: true  # 버킷이 이미 정의됨을 명시
+
+processDelete:
+  events:
+    - s3:
+        bucket: !Ref UploadBucket
+        event: s3:ObjectRemoved:*
+        existing: true  # 버킷이 이미 정의됨을 명시
+```
+
+**왜?** Serverless Framework는 각 S3 이벤트마다 버킷 생성을 시도하므로, 같은 버킷을 여러 함수가 참조하면 충돌 발생.
+
+#### 2️⃣ 버킷 이름 정의 위치 통일
+
+```yaml
+# ❌ 틀린 설정 (버킷 이름 여러 곳에서 정의)
+functions:
+  processUpload:
+    events:
+      - s3:
+          bucket: my-bucket-name  # 문자열로 직접 지정
+
+  processDelete:
+    events:
+      - s3:
+          bucket: my-bucket-name  # 같은 이름
+
+resources:
+  Resources:
+    UploadBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: my-bucket-name  # 또 다시 정의
+# → 중복 정의로 인한 충돌
+
+# ✅ 올바른 설정 (CloudFormation 참조)
+functions:
+  processUpload:
+    events:
+      - s3:
+          bucket: !Ref UploadBucket  # 리소스 참조
+
+  processDelete:
+    events:
+      - s3:
+          bucket: !Ref UploadBucket  # 같은 리소스 참조
+
+resources:
+  Resources:
+    UploadBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: api-s3-bucket-${self:service}-${self:provider.stage}
+```
+
+#### 3️⃣ 버킷 이름 포맷
+
+```yaml
+# ❌ 과도하게 복잡한 이름 (가독성 낮음, 오류 가능성 높음)
+BucketName: api-s3-bucket-${aws:accountId}-${self:provider.region}-${self:custom.timestamp}
+
+# ✅ 단순하고 명확한 이름 (권장)
+BucketName: api-s3-bucket-${self:service}-${self:provider.stage}
+# 예: api-s3-bucket-api-s3-integration-dev
+```
+
+#### 4️⃣ 이벤트 필터링 (선택사항)
+
+```yaml
+processUpload:
+  events:
+    - s3:
+        bucket: !Ref UploadBucket
+        event: s3:ObjectCreated:*
+        rules:
+          - prefix: uploads/ # uploads/ 폴더만
+          - suffix: .json # .json 확장자만
+        existing: true
+```
+
+**필터 없으면:** 버킷의 모든 파일 업로드 감지 → Lambda 과다 호출 가능
+
+#### 5️⃣ 버킷 버전 관리 설정
+
+```yaml
+UploadBucket:
+  Type: AWS::S3::Bucket
+  Properties:
+    BucketName: api-s3-bucket-${self:service}-${self:provider.stage}
+    VersioningConfiguration:
+      Status: Enabled # ⚠️ 삭제 감지를 위해 권장
+    LifecycleConfiguration:
+      Rules:
+        - Id: DeleteOldVersions
+          NoncurrentVersionExpirationInDays: 30
+          Status: Enabled
+```
+
+**중요:** Versioning을 활성화하면 `ObjectRemoved:DeleteMarkerCreated` 이벤트가 발생.
+
+#### 6️⃣ 로컬 테스트 불가
+
+```bash
+# ❌ 로컬에서는 S3 이벤트 트리거 테스트 불가
+npm run offline
+# → S3 이벤트는 작동하지 않음
+
+# ✅ AWS에 배포한 후만 테스트 가능
+serverless deploy
+curl https://...../dev/files/upload
+```
+
+---
 
 ```yaml
 resources:
@@ -356,6 +501,74 @@ npm run deploy
 
 ---
 
+## ✅ 테스트 완료 (Day 2)
+
+### 모든 6개 Lambda 함수 정상 작동 확인
+
+| 함수                   | 기능                           | 상태 | 테스트                   |
+| ---------------------- | ------------------------------ | ---- | ------------------------ |
+| `listFilesHandler`     | 파일 목록 조회                 | ✅   | GET /files               |
+| `uploadFileHandler`    | Pre-signed URL 생성 (업로드)   | ✅   | POST /files/upload       |
+| `getFileHandler`       | Pre-signed URL 생성 (다운로드) | ✅   | GET /files/{filename}    |
+| `deleteFileHandler`    | 파일 삭제                      | ✅   | DELETE /files/{filename} |
+| `processUploadHandler` | S3 업로드 이벤트 트리거        | ✅   | S3 ObjectCreated 감지    |
+| `processDeleteHandler` | S3 삭제 이벤트 트리거          | ✅   | S3 ObjectRemoved 감지    |
+
+### 테스트 시나리오
+
+```bash
+# 1️⃣ 파일 업로드 (Pre-signed URL)
+$ curl -X POST https://jc6o0kziie.execute-api.us-east-1.amazonaws.com/dev/files/upload \
+  -H "Content-Type: application/json" \
+  -d '{"fileName":"test2.json"}'
+# → uploadUrl 생성 + processUploadHandler 자동 실행
+
+# 2️⃣ 파일 목록 확인
+$ curl https://jc6o0kziie.execute-api.us-east-1.amazonaws.com/dev/files
+# → 1개 파일 표시
+
+# 3️⃣ 다운로드 Pre-signed URL 생성
+$ curl https://jc6o0kziie.execute-api.us-east-1.amazonaws.com/dev/files/uploads%2F1766808833273-test2.json
+# → downloadUrl 생성
+
+# 4️⃣ 파일 삭제
+$ curl -X DELETE https://jc6o0kziie.execute-api.us-east-1.amazonaws.com/dev/files/uploads%2F1766808833273-test2.json
+# → processDeleteHandler 자동 실행
+
+# 5️⃣ 파일 목록 확인 (삭제 확인)
+$ curl https://jc6o0kziie.execute-api.us-east-1.amazonaws.com/dev/files
+# → 파일 0개 (empty)
+```
+
+### CloudWatch 로그 확인
+
+**업로드 트리거 로그:**
+
+```json
+{
+  "message": "processUpload triggered by S3 event",
+  "data": {
+    "bucket": "api-s3-bucket-api-s3-integration-dev",
+    "key": "uploads/1766808833273-test2.json",
+    "eventName": "ObjectCreated:Put"
+  }
+}
+```
+
+**삭제 트리거 로그:**
+
+```json
+{
+  "message": "processDelete called",
+  "data": {
+    "eventSource": "aws:s3",
+    "eventName": "ObjectRemoved:DeleteMarkerCreated"
+  }
+}
+```
+
+---
+
 ## 💡 중요 개념
 
 ### Pre-signed URL이란?
@@ -404,7 +617,66 @@ S3 이벤트 트리거:
 
 ### Q: 로컬에서 S3 이벤트 테스트?
 
-**A:** serverless-s3-local 플러그인 사용 (제한적). AWS에서만 완벽하게 테스트 가능.
+**A:** LocalStack이나 moto를 사용해서 어느 정도 S3 이벤트를 에뮬레이션할 수 있지만, 제한이 많아서 결국 AWS 배포 후 테스트하는 것이 정확합니다.
+
+**대안 1: LocalStack (권장도가 중간)**
+
+```bash
+# LocalStack 설치 및 실행 (Docker 필요)
+docker run -d -p 4566:4566 localstack/localstack
+
+# serverless.yml에 LocalStack 엔드포인트 설정
+custom:
+  localstack:
+    stages: [local]
+    host: http://localhost
+    port: 4566
+
+# 배포
+serverless deploy --stage local
+```
+
+**한계:**
+
+- S3 이벤트 알림이 불완전하게 작동
+- 버킷 버전 관리 상태에서 `ObjectRemoved:DeleteMarkerCreated` 이벤트 미지원
+- Lambda 함수와 S3 이벤트 연결이 부분적
+
+**대안 2: moto (Python 기반)**
+
+```bash
+# moto 설치
+pip install moto[s3]
+
+# Python 테스트 작성
+from moto import mock_s3
+import boto3
+
+@mock_s3
+def test_s3_operations():
+    s3 = boto3.client('s3', region_name='us-east-1')
+    s3.create_bucket(Bucket='test-bucket')
+    # 테스트 코드
+```
+
+**한계:**
+
+- S3 이벤트 트리거 에뮬레이션 미지원
+- JavaScript/Node.js 환경에서는 직접 사용 불가
+- 결국 Lambda 함수 로직 테스트만 가능
+
+**✅ 추천 방식:**
+
+1. **API Gateway 트리거**: 로컬에서 `serverless-offline`으로 테스트
+2. **S3 이벤트 트리거**: AWS 배포 후 실제 환경에서 테스트
+
+   ```bash
+   # 배포
+   npm run deploy
+
+   # 실제 파일 업로드 → Lambda 자동 호출
+   # CloudWatch Logs에서 실행 결과 확인
+   ```
 
 ---
 

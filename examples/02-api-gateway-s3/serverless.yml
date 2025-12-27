@@ -1,4 +1,4 @@
-service: api-gateway-s3-lambda
+service: api-s3-integration
 
 provider:
   name: aws
@@ -23,7 +23,7 @@ provider:
         - Effect: Allow
           Action:
             - s3:ListBucket
-          Resource: "arn:aws:s3:::api-s3-bucket"
+          Resource: "arn:aws:s3:::api-s3-bucket-${self:service}-${self:provider.stage}"
 
         # 🟢 S3 객체 읽기/쓰기 권한
         - Effect: Allow
@@ -31,11 +31,11 @@ provider:
             - s3:GetObject
             - s3:PutObject
             - s3:DeleteObject
-          Resource: "arn:aws:s3:::api-s3-bucket/*"
+          Resource: "arn:aws:s3:::api-s3-bucket-${self:service}-${self:provider.stage}/*"
 
   environment:
     STAGE: ${self:provider.stage}
-    BUCKET_NAME: api-s3-bucket
+    BUCKET_NAME: api-s3-bucket-${self:service}-${self:provider.stage}
     BUCKET_REGION: ${self:provider.region}
 
 functions:
@@ -83,14 +83,29 @@ functions:
     events:
       # S3 에서 파일 업로드 이벤트 감지
       - s3:
-          bucket: api-s3-bucket
+          bucket: !Ref UploadBucket
           event: s3:ObjectCreated:*
           rules:
             # uploads/ 폴더 아래만
             - prefix: uploads/
             # .json 파일만
             - suffix: .json
+          existing: true
     # 이 함수는 API Gateway 트리거 없음 (S3 이벤트만)
+
+  # 🟡 S3 이벤트 트리거: 파일 삭제 감지
+  processDelete:
+    handler: handlers/s3.processDeleteHandler
+    description: Triggered when file is deleted from S3
+    events:
+      # S3 에서 파일 삭제 이벤트 감지
+      - s3:
+          bucket: !Ref UploadBucket
+          event: s3:ObjectRemoved:*
+          rules:
+            # uploads/ 폴더 아래만
+            - prefix: uploads/
+          existing: true
 
 # 🔴 추가 AWS 리소스 정의
 resources:
@@ -99,7 +114,7 @@ resources:
     UploadBucket:
       Type: AWS::S3::Bucket
       Properties:
-        BucketName: api-s3-bucket
+        BucketName: api-s3-bucket-${self:service}-${self:provider.stage}
         VersioningConfiguration:
           Status: Enabled
         LifecycleConfiguration:
@@ -109,31 +124,12 @@ resources:
               NoncurrentVersionExpirationInDays: 30
               Status: Enabled
 
-    # S3 버킷 CORS 설정 (API 요청 허용)
-    UploadBucketCorsConfiguration:
-      Type: AWS::S3::BucketCorsConfiguration
-      Properties:
-        Bucket: api-s3-bucket
-        CorsConfiguration:
-          CorsRules:
-            - AllowedHeaders:
-                - "*"
-              AllowedMethods:
-                - GET
-                - PUT
-                - POST
-              AllowedOrigins:
-                - "*"
-              MaxAgeSeconds: 3000
-
-    # 🟡 S3 이벤트 트리거 설정 (Lambda를 S3 이벤트에 연결)
-    # 이건 resources에 정의하거나 processUpload의 events에 정의 (둘 다 같은 결과)
-
 plugins:
   - serverless-offline
   - serverless-s3-local
 
 custom:
+  timestamp: ${file(./timestamp.js):timestamp}
   s3:
     # 로컬 S3 에뮬레이터 설정
     host: 127.0.0.1
