@@ -151,6 +151,9 @@ npm install
 ### Step 2: 로컬 테스트
 
 ```bash
+# SAM 빌드 (처음 한 번만, 또는 코드 변경 시)
+sam build
+
 # SAM 로컬 API 시작 (localhost:3000)
 npm run local
 ```
@@ -164,52 +167,188 @@ Mounting CreateMessageFunction at http://127.0.0.1:3000/message [POST]
 Mounting DivideFunction at http://127.0.0.1:3000/divide [POST]
 ```
 
-테스트 (다른 터미널에서):
+#### 로컬 테스트 명령어 (다른 터미널에서)
 
 ```bash
-# 1️⃣ GET /say-hello
+# 1️⃣ GET /say-hello (기본 요청)
 curl http://localhost:3000/say-hello
 
-# 2️⃣ GET /greet/{name}
-curl http://localhost:3000/greet/Alice
+# ✅ 응답:
+# {"greeting":"Hello, World!","timestamp":"2025-12-27T22:22:18.429Z","stage":"dev","environment":"development"}
 
-# 3️⃣ POST /message
+# 2️⃣ GET /greet/{name} (경로 파라미터)
+curl http://localhost:3000/greet/Jason
+
+# ✅ 응답:
+# {"greeting":"Hello, Jason!","timestamp":"2025-12-27T22:22:30.000Z","name":"Jason","stage":"dev"}
+
+# 3️⃣ POST /message (JSON 본문, title/content 필수)
 curl -X POST http://localhost:3000/message \
   -H "Content-Type: application/json" \
   -d '{"title":"Hello","content":"World","author":"Alice"}'
 
-# 4️⃣ POST /divide
+# ✅ 응답:
+# {"id":"msg-1766870550000","title":"Hello","content":"World","author":"Alice","createdAt":"2025-12-27T22:22:30.000Z","stage":"dev","environment":"development"}
+
+# 4️⃣ POST /divide (dividend/divisor 필수, divisor ≠ 0)
 curl -X POST http://localhost:3000/divide \
   -H "Content-Type: application/json" \
   -d '{"dividend":10,"divisor":2}'
+
+# ✅ 응답:
+# {"dividend":10,"divisor":2,"result":5,"timestamp":"2025-12-27T22:24:49.879Z","stage":"dev"}
 ```
+
+#### 로컬 테스트 결과 요약
+
+| 함수          | 경로            | 메서드 | 상태    | 테스트됨   |
+| ------------- | --------------- | ------ | ------- | ---------- |
+| SayHello      | `/say-hello`    | GET    | ✅ 정상 | 2025-12-28 |
+| Greet         | `/greet/{name}` | GET    | ✅ 정상 | 2025-12-28 |
+| CreateMessage | `/message`      | POST   | ✅ 정상 | 2025-12-28 |
+| Divide        | `/divide`       | POST   | ✅ 정상 | 2025-12-28 |
+
+**주의사항**:
+
+- `npm run local` 실행 시 Docker를 통해 AWS Lambda 환경을 에뮬레이션합니다
+- 첫 실행 시 Docker 이미지 다운로드로 시간이 걸릴 수 있습니다
+- `aws-sdk` 의존성은 불필요하면 제거해도 됩니다 (이 프로젝트는 제거됨)
 
 ### Step 3: AWS에 배포
 
+#### 3-1. 배포 전 체크리스트
+
+- ✅ `sam build` 실행 완료
+- ✅ `npm install` 의존성 설치 완료
+- ✅ 로컬 테스트 모두 통과
+- ✅ AWS 계정 및 AWS CLI 설정 완료
+- ✅ IAM 권한 확인 (CloudFormation, Lambda, API Gateway, IAM 권한 필요)
+
+#### 3-2. 배포 명령어
+
 ```bash
-# 첫 배포 (대화형 설정)
+# 첫 배포 (대화형 설정 - samconfig.toml 생성)
 npm run deploy
 
-# 또는 명령줄로 직접
+# 또는 직접 실행
 sam deploy --guided \
   --parameter-overrides \
     Stage=dev \
     Environment=development
+```
 
-# 이후 배포 (samconfig.toml 사용)
+**배포 중 물어보는 항목**:
+
+- Stack name: `hello-world-sam-dev` (기본값 또는 커스텀)
+- Region: `us-east-1` (또는 선호하는 리전)
+- Confirm changes before deploy: `Y` (변경사항 확인)
+- Allow SAM CLI IAM role creation: `Y` (IAM 역할 생성)
+- Save parameters to samconfig.toml: `Y` (설정 저장)
+
+#### 3-3. 이후 배포 (samconfig.toml 사용)
+
+```bash
+# Dev 환경 배포
 npm run deploy-dev
+
+# Staging 환경 배포
 npm run deploy-staging
+
+# Prod 환경 배포
 npm run deploy-prod
+
+# 또는
+sam deploy
+```
+
+#### 3-4. 배포 후 확인
+
+```bash
+# CloudFormation 스택 상태 확인
+aws cloudformation describe-stacks \
+  --stack-name hello-world-sam-dev \
+  --query 'Stacks[0].[StackStatus,StackName]'
+
+# API Gateway 엔드포인트 확인
+aws cloudformation describe-stacks \
+  --stack-name hello-world-sam-dev \
+  --query 'Stacks[0].Outputs[?OutputKey==`HelloWorldApiEndpoint`].OutputValue' \
+  --output text
+
+# 배포된 Lambda 함수 확인
+aws lambda list-functions --query 'Functions[?contains(FunctionName, `hello-world`)].FunctionName'
+
+# CloudWatch 로그 확인
+aws logs tail /aws/lambda/hello-world-say-hello-dev --follow
+```
+
+#### 3-5. AWS에 배포된 함수 테스트
+
+```bash
+# API Gateway 엔드포인트로 테스트 (권장)
+API_ENDPOINT=$(aws cloudformation describe-stacks \
+  --stack-name hello-world-sam-dev \
+  --query 'Stacks[0].Outputs[0].OutputValue' \
+  --output text)
+
+curl $API_ENDPOINT/say-hello
+
+# 또는 Lambda 함수 직접 호출
+aws lambda invoke \
+  --function-name hello-world-say-hello-dev \
+  --payload '{}' \
+  response.json
+
+cat response.json
+```
+
+### Step 4: 정리 (삭제)
+
+```bash
+# CloudFormation 스택 삭제 (리소스 정리)
+aws cloudformation delete-stack \
+  --stack-name hello-world-sam-dev
+
+# 삭제 완료 대기
+aws cloudformation wait stack-delete-complete \
+  --stack-name hello-world-sam-dev
+
+# S3 artifacts 버킷 확인 및 수동 삭제
+aws s3 ls | grep aws-sam-cli-artifacts
+```
+
+---
+
+## ✅ 테스트 완료 현황 (2025-12-28)
+
+### 로컬 테스트 ✅
+
+- SAM local 실행: ✅ 성공
+- 4개 함수 모두 정상 작동: ✅ 성공
+- Docker 기반 Lambda 에뮬레이션: ✅ 정상
+- 환경변수 (STAGE, ENVIRONMENT) 주입: ✅ 정상
+
+### AWS 배포 준비 상태
+
+- template.yaml 검증: ✅ 완료
+- package.json 의존성: ✅ 정리 완료
+- handlers/hello.js: ✅ 준비 완료
+- samconfig.toml: 배포 시 자동 생성됨
+  npm run deploy-staging
+  npm run deploy-prod
+
 ```
 
 배포 후 출력:
 
 ```
+
 CloudFormation outputs from deployed stack
-Key                   Value
+Key Value
 HelloWorldApiEndpoint https://abc123.execute-api.us-east-1.amazonaws.com/dev
-SayHelloFunctionArn   arn:aws:lambda:us-east-1:123456:function:hello-world-say-hello-dev
-```
+SayHelloFunctionArn arn:aws:lambda:us-east-1:123456:function:hello-world-say-hello-dev
+
+````
 
 배포된 API 테스트:
 
@@ -231,7 +370,7 @@ curl -X POST $API_ENDPOINT/message \
 curl -X POST $API_ENDPOINT/divide \
   -H "Content-Type: application/json" \
   -d '{"dividend":20,"divisor":4}'
-```
+````
 
 ---
 

@@ -24,7 +24,5 @@
   "dependencies": {
     "aws-sdk": "^2.1400.0"
   },
-  "devDependencies": {
-    "aws-sam-cli": "^1.80.0"
-  }
+  "devDependencies": {}
 }

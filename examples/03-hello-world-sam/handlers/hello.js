@@ -1,8 +1,6 @@
 // Copy of handlers/hello.js from example 01-hello-world
 // (Same implementation works for both Serverless and SAM)
 
-const AWS = require("aws-sdk");
-
 // ============================================
 // Utility Functions
 // ============================================
