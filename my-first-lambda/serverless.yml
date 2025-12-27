@@ -17,3 +17,7 @@ functions:
           path: hello
           method: get
           cors: true
+      - http:
+          path: hello
+          method: post
+          cors: true

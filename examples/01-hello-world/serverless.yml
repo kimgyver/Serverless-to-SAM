@@ -5,7 +5,7 @@ provider:
   runtime: nodejs18.x
   region: us-east-1
   stage: ${opt:stage, 'dev'}
-  
+
   # 모든 Lambda 함수가 공유할 권한
   iam:
     role:
@@ -18,13 +18,23 @@ provider:
             - logs:CreateLogStream
             - logs:PutLogEvents
           Resource: "*"
-  
+        # DynamoDB 권한
+        - Effect: Allow
+          Action:
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+            - dynamodb:Scan
+          Resource: "arn:aws:dynamodb:${self:provider.region}:*:table/hello-world-items-${self:provider.stage}"
+
   # 모든 Lambda 함수가 접근할 환경변수
   environment:
     STAGE: ${self:provider.stage}
     LOG_LEVEL: INFO
     SERVICE_NAME: hello-world-lambda
-  
+    ITEMS_TABLE: hello-world-items-${self:provider.stage}
+
   # 태그 (모든 리소스에 자동 추가)
   tags:
     Environment: ${self:provider.stage}
@@ -82,13 +92,76 @@ functions:
                 a: true
                 b: true
 
-# 추가 리소스 (선택 - 이 예제에선 없음)
-# resources:
-#   Resources:
-#     MyTable:
-#       Type: AWS::DynamoDB::Table
-#       Properties:
-#         ...
+  # 5️⃣ PUT 메서드: 아이템 수정
+  updateItem:
+    handler: handlers/hello.updateItemHandler
+    description: Updates an item (PUT method demo)
+    events:
+      - http:
+          path: item/{id}
+          method: put
+          cors: true
+          request:
+            parameters:
+              paths:
+                id: true
+
+  # 6️⃣ DELETE 메서드: 아이템 삭제
+  deleteItem:
+    handler: handlers/hello.deleteItemHandler
+    description: Deletes an item (DELETE method demo)
+    events:
+      - http:
+          path: item/{id}
+          method: delete
+          cors: true
+          request:
+            parameters:
+              paths:
+                id: true
+
+  # 7️⃣ GET /items - 모든 아이템 조회 (DynamoDB Scan)
+  listItems:
+    handler: handlers/hello.listItemsHandler
+    description: Lists all items from DynamoDB
+    events:
+      - http:
+          path: items
+          method: get
+          cors: true
+
+  # 8️⃣ POST /item - 새 아이템 생성 (DynamoDB Put)
+  createItem:
+    handler: handlers/hello.createItemHandler
+    description: Creates a new item in DynamoDB
+    events:
+      - http:
+          path: item
+          method: post
+          cors: true
+
+# CloudFormation 리소스: DynamoDB 테이블
+resources:
+  Resources:
+    # hello-world-items 테이블
+    ItemsTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: hello-world-items-${self:provider.stage}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        StreamSpecification:
+          StreamViewType: NEW_AND_OLD_IMAGES
+        Tags:
+          - Key: Environment
+            Value: ${self:provider.stage}
+          - Key: Service
+            Value: HelloWorld
 
 # 커스텀 설정 (선택)
 custom:

@@ -17,8 +17,11 @@
   ],
   "author": "Jason",
   "license": "MIT",
+  "dependencies": {
+    "aws-sdk": "^2.1400.0"
+  },
   "devDependencies": {
     "serverless": "^3.40.0",
-    "serverless-offline": "^14.4.0"
+    "serverless-offline": "^13.3.0"
   }
 }
