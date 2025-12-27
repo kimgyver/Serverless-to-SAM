@@ -1,10 +1,27 @@
-// utils/validation.js - 요청 데이터 검증 유틸
+/**
+ * utils/validation.js - 요청 데이터 검증 유틸
+ *
+ * 역할:
+ * - 문자열, 숫자, 스키마 검증
+ * - 일관된 에러 메시지 제공
+ * - 모든 핸들러에서 재사용 가능
+ *
+ * 사용 예:
+ * ```javascript
+ * const { valid, error } = validateString(title, { required: true, minLength: 1 });
+ * if (!valid) throw new ValidationError(error);
+ * ```
+ */
+
+// ==========================================
+// 검증 함수들
+// ==========================================
 
 /**
  * 문자열 검증
  * @param {string} value - 검증할 값
- * @param {object} options - {required: boolean, minLength: number, maxLength: number}
- * @returns {object} { valid: boolean, error: string }
+ * @param {object} options - { required?, minLength?, maxLength? }
+ * @returns {object} { valid: boolean, error?: string }
  */
 const validateString = (value, options = {}) => {
   const { required = false, minLength = 0, maxLength = 1000 } = options;
@@ -27,7 +44,8 @@ const validateString = (value, options = {}) => {
 /**
  * 숫자 검증
  * @param {number} value - 검증할 값
- * @param {object} options - {required: boolean, min: number, max: number}
+ * @param {object} options - { required?, min?, max?, integer? }
+
  * @returns {object} { valid: boolean, error: string }
  */
 const validateNumber = (value, options = {}) => {

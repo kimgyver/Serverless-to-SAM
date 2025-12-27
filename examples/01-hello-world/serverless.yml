@@ -1,5 +1,20 @@
 service: hello-world-lambda
 
+# ==========================================
+# 📌 로컬/배포 테스트 전략
+# ==========================================
+# 로컬: serverless-offline + AWS DynamoDB 개발 테이블
+# 배포: AWS Lambda + AWS DynamoDB 프로덕션 테이블
+#
+# LocalStack/SAM CLI 없는 이유:
+# - LocalStack: 설치 복잡, 학습용으로 오버스팩
+# - SAM CLI: 별도 템플릿 필요
+# - 현재 방식: 가장 간단하고 AWS와 동일한 환경
+# ==========================================
+
+plugins:
+  - serverless-offline # HTTP 엔드포인트 로컬 시뮬레이션
+
 provider:
   name: aws
   runtime: nodejs18.x
@@ -170,7 +185,3 @@ custom:
     httpPort: 3000
     websocketPort: 3001
     lambdaPort: 3002
-
-# 플러그인 (로컬 테스트용)
-plugins:
-  - serverless-offline

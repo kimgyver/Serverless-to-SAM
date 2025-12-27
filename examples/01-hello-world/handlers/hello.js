@@ -1,4 +1,22 @@
-// handlers/hello.js - 개선된 Lambda 함수들 (검증 + 에러 처리 + DynamoDB)
+/**
+ * handlers/hello.js - 8개 Lambda 함수 엔드포인트
+ *
+ * 포함:
+ * 1. helloHandler       - GET /hello (기본)
+ * 2. greetHandler       - GET /hello/{name} (경로 파라미터)
+ * 3. createMessageHandler - POST /message (본문 파싱)
+ * 4. divideHandler      - GET /divide/{a}/{b} (에러 처리)
+ * 5. createItemHandler  - POST /item (DynamoDB 생성)
+ * 6. getItemHandler     - GET /item/{id} (DynamoDB 조회)
+ * 7. updateItemHandler  - PUT /item/{id} (DynamoDB 수정)
+ * 8. deleteItemHandler  - DELETE /item/{id} (DynamoDB 삭제)
+ *
+ * 기능:
+ * - 입력값 검증
+ * - 통합된 에러 처리
+ * - DynamoDB 연동
+ * - CloudWatch 로깅
+ */
 
 const stage = process.env.STAGE;
 const {
@@ -21,7 +39,16 @@ const {
   itemExists
 } = require("../utils/dynamodb");
 
-// 🔴 유틸: HTTP 응답 생성 헬퍼
+// ==========================================
+// 🛠️ HTTP 응답 생성 헬퍼
+// ==========================================
+
+/**
+ * HTTP 응답 객체 생성
+ * @param {number} statusCode - HTTP 상태 코드
+ * @param {object} body - 응답 본문
+ * @returns {object} Lambda 프록시 응답
+ */
 const createResponse = (statusCode, body) => {
   return {
     statusCode,
