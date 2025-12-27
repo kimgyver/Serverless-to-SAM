@@ -159,8 +159,6 @@ service: hello-world-lambda
 
 ### Provider 설정
 
-````
-
 ```yaml
 provider:
   name: aws
@@ -314,6 +312,7 @@ exports.divideHandler = async (event, context) => {
 ```
 
 **에러 응답 예:**
+
 ```json
 {
   "statusCode": 400,
@@ -367,6 +366,7 @@ exports.createMessageHandler = async (event, context) => {
 ```
 
 **검증 실패 응답:**
+
 ```json
 {
   "statusCode": 422,
@@ -403,7 +403,9 @@ exports.createItemHandler = async (event, context) => {
     // 검증 (생략)
 
     // ID 생성
-    const id = `item-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+    const id = `item-${Date.now()}-${Math.random()
+      .toString(36)
+      .substring(2, 9)}`;
 
     // DynamoDB에 저장
     const item = await createItem({
@@ -438,7 +440,7 @@ exports.updateItemHandler = async (event, context) => {
   let body = JSON.parse(event.body);
 
   // 아이템 존재 확인
-  if (!await itemExists(id)) {
+  if (!(await itemExists(id))) {
     throw new NotFoundError(`Item ${id} not found`);
   }
 
@@ -454,7 +456,7 @@ exports.updateItemHandler = async (event, context) => {
 exports.deleteItemHandler = async (event, context) => {
   const { id } = event.pathParameters;
 
-  if (!await itemExists(id)) {
+  if (!(await itemExists(id))) {
     throw new NotFoundError(`Item ${id} not found`);
   }
 
@@ -773,12 +775,12 @@ serverless logs -f createItem --tail
 
 **맞습니다!** serverless-offline은 HTTP 이벤트만 지원합니다.
 
-| 기능 | 로컬 | AWS |
-|------|------|-----|
-| HTTP 요청 | ✅ | ✅ |
-| DynamoDB | ❌ | ✅ |
-| S3 | ❌ | ✅ |
-| SNS/SQS | ❌ | ✅ |
+| 기능      | 로컬 | AWS |
+| --------- | ---- | --- |
+| HTTP 요청 | ✅   | ✅  |
+| DynamoDB  | ❌   | ✅  |
+| S3        | ❌   | ✅  |
+| SNS/SQS   | ❌   | ✅  |
 
 **DynamoDB 로컬 테스트 옵션:**
 
@@ -836,11 +838,12 @@ curl -X POST -H "Content-Type: application/json" \
 // utils/validation.js에서 정의
 const schema = {
   message: {
-    validator: (val) => validateString(val, {
-      required: true,       // 필수
-      minLength: 1,         // 최소 1자
-      maxLength: 500        // 최대 500자
-    })
+    validator: val =>
+      validateString(val, {
+        required: true, // 필수
+        minLength: 1, // 최소 1자
+        maxLength: 500 // 최대 500자
+      })
   }
 };
 ```
@@ -908,8 +911,11 @@ class ValidationError extends APIError { ... }
 ---
 
 **완벽하게 끝났습니다! 🎉 AWS Lambda 기초를 마스터했습니다!**
-````
 
-`````
-````
-`````
+```
+
+```
+
+```
+
+```
