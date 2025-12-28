@@ -24,7 +24,7 @@ Parameters:
 Globals:
   Function:
     # 모든 함수에 공통으로 적용되는 설정
-    Timeout: 10
+    Timeout: 30
     MemorySize: 128
     Runtime: nodejs18.x
     Architectures:
@@ -63,6 +63,39 @@ Resources:
                   - logs:CreateLogStream
                   - logs:PutLogEvents
                 Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*"
+        - PolicyName: DynamoDBAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:Scan
+                Resource: !GetAtt ItemsTable.Arn
+
+  # ============================================
+  # CloudWatch Logs Role for API Gateway
+  # ============================================
+  ApiGatewayCloudWatchLogsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: apigateway.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/CloudWatchLogsFullAccess
+
+  ApiGatewayAccountSetting:
+    Type: AWS::ApiGateway::Account
+    Properties:
+      CloudWatchRoleArn: !GetAtt ApiGatewayCloudWatchLogsRole.Arn
 
   # ============================================
   # Lambda Functions
@@ -156,9 +189,119 @@ Resources:
         Stage: !Ref Stage
         Service: HelloWorldService
 
+  # Function 5: ListItems - DynamoDB Scan
+  ListItemsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "hello-world-list-items-${Stage}"
+      CodeUri: handlers/
+      Handler: hello.listItems
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Environment:
+        Variables:
+          FUNCTION_NAME: ListItems
+          ITEMS_TABLE: !Ref ItemsTable
+      Events:
+        HttpEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref HelloWorldApi
+            Path: /items
+            Method: GET
+      Tags:
+        Stage: !Ref Stage
+        Service: HelloWorldService
+
+  # Function 6: CreateItem - DynamoDB Put
+  CreateItemFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "hello-world-create-item-${Stage}"
+      CodeUri: handlers/
+      Handler: hello.createItem
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Environment:
+        Variables:
+          FUNCTION_NAME: CreateItem
+          ITEMS_TABLE: !Ref ItemsTable
+      Events:
+        HttpEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref HelloWorldApi
+            Path: /item
+            Method: POST
+      Tags:
+        Stage: !Ref Stage
+        Service: HelloWorldService
+
+  # Function 7: UpdateItem - DynamoDB Update
+  UpdateItemFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "hello-world-update-item-${Stage}"
+      CodeUri: handlers/
+      Handler: hello.updateItem
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Environment:
+        Variables:
+          FUNCTION_NAME: UpdateItem
+          ITEMS_TABLE: !Ref ItemsTable
+      Events:
+        HttpEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref HelloWorldApi
+            Path: /item/{id}
+            Method: PUT
+      Tags:
+        Stage: !Ref Stage
+        Service: HelloWorldService
+
+  # Function 8: DeleteItem - DynamoDB Delete
+  DeleteItemFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "hello-world-delete-item-${Stage}"
+      CodeUri: handlers/
+      Handler: hello.deleteItem
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Environment:
+        Variables:
+          FUNCTION_NAME: DeleteItem
+          ITEMS_TABLE: !Ref ItemsTable
+      Events:
+        HttpEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref HelloWorldApi
+            Path: /item/{id}
+            Method: DELETE
+      Tags:
+        Stage: !Ref Stage
+        Service: HelloWorldService
+
   # ============================================
-  # API Gateway
+  # DynamoDB Table
   # ============================================
+  ItemsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "sam-hello-world-items-${Stage}"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+      Tags:
+        - Key: Stage
+          Value: !Ref Stage
+        - Key: Service
+          Value: HelloWorldService
 
   HelloWorldApi:
     Type: AWS::Serverless::Api

@@ -1,0 +1,17 @@
+version: "3.8"
+
+services:
+  localstack:
+    image: localstack/localstack:latest
+    container_name: localstack-hello-world
+    ports:
+      - "4566:4566"
+    environment:
+      SERVICES: dynamodb
+      DEBUG: 0
+      AWS_DEFAULT_REGION: us-west-2
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10

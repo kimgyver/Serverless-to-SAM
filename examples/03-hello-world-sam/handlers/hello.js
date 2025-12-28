@@ -252,3 +252,257 @@ exports.divide = async (event, context) => {
     });
   }
 };
+
+// ============================================
+// DynamoDB Handlers
+// ============================================
+
+const AWS = require("aws-sdk");
+
+// DynamoDB Configuration
+const dynamodbConfig = {
+  region: process.env.AWS_REGION || "us-west-2"
+};
+
+// For LocalStack integration: configure endpoint when DYNAMODB_ENDPOINT is provided
+if (process.env.DYNAMODB_ENDPOINT) {
+  dynamodbConfig.endpoint = process.env.DYNAMODB_ENDPOINT;
+}
+
+const dynamodb = new AWS.DynamoDB.DocumentClient(dynamodbConfig);
+
+// Table name from environment or use default
+const tableName = process.env.ITEMS_TABLE || "sam-hello-world-items";
+
+// Handler: ListItems
+exports.listItems = async (event, context) => {
+  const logger = createLogger("ListItems");
+
+  try {
+    logger.log("Received request", {
+      path: event.path,
+      method: event.httpMethod
+    });
+
+    const result = await dynamodb
+      .scan({
+        TableName: tableName
+      })
+      .promise();
+
+    logger.log("Items retrieved", { count: result.Items.length });
+    return createResponse(200, {
+      items: result.Items,
+      count: result.Items.length,
+      stage: process.env.STAGE
+    });
+  } catch (error) {
+    logger.error("Handler failed", error);
+    return createResponse(500, {
+      error: "Internal Server Error",
+      message: error.message
+    });
+  }
+};
+
+// Handler: CreateItem
+exports.createItem = async (event, context) => {
+  const logger = createLogger("CreateItem");
+
+  try {
+    let body = {};
+
+    if (event.body) {
+      try {
+        body = JSON.parse(event.body);
+      } catch (parseError) {
+        logger.error("Invalid JSON body", parseError);
+        return createResponse(400, {
+          error: "Bad Request",
+          message: "Request body must be valid JSON"
+        });
+      }
+    }
+
+    logger.log("Received request", {
+      path: event.path,
+      method: event.httpMethod,
+      bodyKeys: Object.keys(body)
+    });
+
+    const { title, description, author } = body;
+
+    // Validation
+    if (!title) {
+      logger.error("Missing required fields", { title });
+      return createResponse(400, {
+        error: "Bad Request",
+        message: "title is required"
+      });
+    }
+
+    const id = `item-${Date.now()}`;
+    const item = {
+      id,
+      title,
+      description: description || "",
+      author: author || "Anonymous",
+      createdAt: new Date().toISOString(),
+      stage: process.env.STAGE
+    };
+
+    await dynamodb
+      .put({
+        TableName: tableName,
+        Item: item
+      })
+      .promise();
+
+    logger.log("Item created", { itemId: id });
+    return createResponse(201, item);
+  } catch (error) {
+    logger.error("Handler failed", error);
+    return createResponse(500, {
+      error: "Internal Server Error",
+      message: error.message
+    });
+  }
+};
+
+// Handler: UpdateItem
+exports.updateItem = async (event, context) => {
+  const logger = createLogger("UpdateItem");
+
+  try {
+    const { id } = event.pathParameters || {};
+
+    let body = {};
+
+    if (event.body) {
+      try {
+        body = JSON.parse(event.body);
+      } catch (parseError) {
+        logger.error("Invalid JSON body", parseError);
+        return createResponse(400, {
+          error: "Bad Request",
+          message: "Request body must be valid JSON"
+        });
+      }
+    }
+
+    logger.log("Received request", {
+      path: event.path,
+      method: event.httpMethod,
+      itemId: id,
+      bodyKeys: Object.keys(body)
+    });
+
+    if (!id) {
+      logger.error("Missing item id");
+      return createResponse(400, {
+        error: "Bad Request",
+        message: "id path parameter is required"
+      });
+    }
+
+    const { title, description, author } = body;
+
+    // Build update expression
+    const updateParts = [];
+    const expressionAttributeValues = {};
+    const expressionAttributeNames = {};
+
+    if (title !== undefined) {
+      updateParts.push("#t = :title");
+      expressionAttributeValues[":title"] = title;
+      expressionAttributeNames["#t"] = "title";
+    }
+
+    if (description !== undefined) {
+      updateParts.push("#d = :description");
+      expressionAttributeValues[":description"] = description;
+      expressionAttributeNames["#d"] = "description";
+    }
+
+    if (author !== undefined) {
+      updateParts.push("#a = :author");
+      expressionAttributeValues[":author"] = author;
+      expressionAttributeNames["#a"] = "author";
+    }
+
+    if (updateParts.length === 0) {
+      logger.error("No fields to update");
+      return createResponse(400, {
+        error: "Bad Request",
+        message: "At least one field (title, description, author) is required"
+      });
+    }
+
+    updateParts.push("#u = :updatedAt");
+    expressionAttributeValues[":updatedAt"] = new Date().toISOString();
+    expressionAttributeNames["#u"] = "updatedAt";
+
+    const result = await dynamodb
+      .update({
+        TableName: tableName,
+        Key: { id },
+        UpdateExpression: `SET ${updateParts.join(", ")}`,
+        ExpressionAttributeNames: expressionAttributeNames,
+        ExpressionAttributeValues: expressionAttributeValues,
+        ReturnValues: "ALL_NEW"
+      })
+      .promise();
+
+    logger.log("Item updated", { itemId: id });
+    return createResponse(200, result.Attributes);
+  } catch (error) {
+    logger.error("Handler failed", error);
+    return createResponse(500, {
+      error: "Internal Server Error",
+      message: error.message
+    });
+  }
+};
+
+// Handler: DeleteItem
+exports.deleteItem = async (event, context) => {
+  const logger = createLogger("DeleteItem");
+
+  try {
+    const { id } = event.pathParameters || {};
+
+    logger.log("Received request", {
+      path: event.path,
+      method: event.httpMethod,
+      itemId: id
+    });
+
+    if (!id) {
+      logger.error("Missing item id");
+      return createResponse(400, {
+        error: "Bad Request",
+        message: "id path parameter is required"
+      });
+    }
+
+    await dynamodb
+      .delete({
+        TableName: tableName,
+        Key: { id }
+      })
+      .promise();
+
+    logger.log("Item deleted", { itemId: id });
+    return createResponse(200, {
+      message: "Item deleted successfully",
+      itemId: id,
+      stage: process.env.STAGE
+    });
+  } catch (error) {
+    logger.error("Handler failed", error);
+    return createResponse(500, {
+      error: "Internal Server Error",
+      message: error.message
+    });
+  }
+};
