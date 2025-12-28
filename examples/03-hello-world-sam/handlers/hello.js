@@ -261,12 +261,13 @@ const AWS = require("aws-sdk");
 
 // DynamoDB Configuration
 const dynamodbConfig = {
-  region: process.env.AWS_REGION || "us-west-2"
+  region: "us-east-1" // Explicitly set to us-east-1 for AWS
 };
 
 // For LocalStack integration: configure endpoint when DYNAMODB_ENDPOINT is provided
 if (process.env.DYNAMODB_ENDPOINT) {
   dynamodbConfig.endpoint = process.env.DYNAMODB_ENDPOINT;
+  dynamodbConfig.region = process.env.AWS_REGION || "us-west-2"; // LocalStack uses different region
 }
 
 const dynamodb = new AWS.DynamoDB.DocumentClient(dynamodbConfig);

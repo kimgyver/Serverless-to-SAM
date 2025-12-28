@@ -105,8 +105,8 @@ Resources:
   SayHelloFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub "hello-world-say-hello-${Stage}"
-      CodeUri: handlers/
+      FunctionName: !Sub hello-world-say-hello-${Stage}
+      CodeUri: ./handlers
       Handler: hello.sayHello
       Role: !GetAtt LambdaExecutionRole.Arn
       Environment:
@@ -127,8 +127,8 @@ Resources:
   GreetFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub "hello-world-greet-${Stage}"
-      CodeUri: handlers/
+      FunctionName: !Sub hello-world-greet-${Stage}
+      CodeUri: ./handlers
       Handler: hello.greet
       Role: !GetAtt LambdaExecutionRole.Arn
       Environment:
@@ -149,8 +149,8 @@ Resources:
   CreateMessageFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub "hello-world-create-message-${Stage}"
-      CodeUri: handlers/
+      FunctionName: !Sub hello-world-create-message-${Stage}
+      CodeUri: ./handlers
       Handler: hello.createMessage
       Role: !GetAtt LambdaExecutionRole.Arn
       Environment:
@@ -171,8 +171,8 @@ Resources:
   DivideFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub "hello-world-divide-${Stage}"
-      CodeUri: handlers/
+      FunctionName: !Sub hello-world-divide-${Stage}
+      CodeUri: ./handlers
       Handler: hello.divide
       Role: !GetAtt LambdaExecutionRole.Arn
       Environment:
@@ -193,8 +193,8 @@ Resources:
   ListItemsFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub "hello-world-list-items-${Stage}"
-      CodeUri: handlers/
+      FunctionName: !Sub hello-world-list-items-${Stage}
+      CodeUri: ./handlers
       Handler: hello.listItems
       Role: !GetAtt LambdaExecutionRole.Arn
       Environment:
@@ -216,8 +216,8 @@ Resources:
   CreateItemFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub "hello-world-create-item-${Stage}"
-      CodeUri: handlers/
+      FunctionName: !Sub hello-world-create-item-${Stage}
+      CodeUri: ./handlers
       Handler: hello.createItem
       Role: !GetAtt LambdaExecutionRole.Arn
       Environment:
@@ -239,8 +239,8 @@ Resources:
   UpdateItemFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub "hello-world-update-item-${Stage}"
-      CodeUri: handlers/
+      FunctionName: !Sub hello-world-update-item-${Stage}
+      CodeUri: ./handlers
       Handler: hello.updateItem
       Role: !GetAtt LambdaExecutionRole.Arn
       Environment:
@@ -262,8 +262,8 @@ Resources:
   DeleteItemFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub "hello-world-delete-item-${Stage}"
-      CodeUri: handlers/
+      FunctionName: !Sub hello-world-delete-item-${Stage}
+      CodeUri: ./handlers
       Handler: hello.deleteItem
       Role: !GetAtt LambdaExecutionRole.Arn
       Environment:

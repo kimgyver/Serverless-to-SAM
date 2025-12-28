@@ -4,7 +4,8 @@
   "description": "SAM Example 1: Hello World with HTTP API Gateway",
   "main": "handlers/hello.js",
   "scripts": {
-    "test": "AWS_REGION=us-west-2 ITEMS_TABLE=sam-hello-world-items-local DYNAMODB_ENDPOINT=http://localhost:4566 node test-all.js",
+    "test": "AWS_REGION=us-west-2 ITEMS_TABLE=sam-hello-world-items-local DYNAMODB_ENDPOINT=http://localhost:4566 node localstack-test-all.js",
+    "test:aws": "node sam-local-test-all.js",
     "build": "sam build",
     "deploy": "sam deploy --guided",
     "deploy-dev": "sam deploy --config-env dev",
