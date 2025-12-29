@@ -244,7 +244,7 @@ SAM Local 실행 흐름:
 ## ✅ 최종 체크리스트
 
 - [ ] AWS CLI 설정 완료 (`aws configure`)
-- [ ] IAM 권한 설정 완료 (`./setup-iam-permissions.sh` 실행)
+- [ ] IAM 권한 설정 완료 (`./scripts/setup-iam-permissions.sh` 실행)
 - [ ] `.env.json` 파일 존재 및 올바른 내용
 - [ ] `handlers/hello.js`에서 region이 "us-east-1"로 hardcoded
 - [ ] DynamoDB 테이블 존재 (`aws dynamodb list-tables` 확인)

@@ -257,10 +257,10 @@ aws iam attach-user-policy \
 
 ```bash
 # 제한적 접근 (권장)
-./setup-iam-permissions.sh jasonkim restricted
+./scripts/setup-iam-permissions.sh jasonkim restricted
 
 # 또는 전체 접근
-./setup-iam-permissions.sh jasonkim full
+./scripts/setup-iam-permissions.sh jasonkim full
 ```
 
 #### 권한 확인
@@ -400,7 +400,21 @@ A: 예. SAM Local은 CloudFormation 변수 치환을 지원하지 않으므로, 
 
 ### Q3: IAM 권한은 왜 필요한가요?
 
-A: SAM Local은 당신의 AWS 자격증명으로 실행됩니다. 따라서 IAM 사용자(당신)가 DynamoDB 테이블에 접근할 권한을 가져야 합니다.
+A: **SAM Local 개발 시에만 필요합니다.**
+
+SAM Local은 당신의 AWS 자격증명으로 실행되므로, IAM 사용자(당신)가 DynamoDB에 접근할 권한을 가져야 합니다.
+
+```
+필요한 경우 (IAM 사용자 권한 필요):
+├─ SAM Local에서 AWS DynamoDB 접근
+├─ 로컬 머신에서 AWS CLI로 DynamoDB 접근
+└─ 개발 중에 수동으로 AWS 리소스 관리
+
+필요 없는 경우 (자동 제공됨):
+├─ 프로덕션 Lambda 실행 (Lambda의 IAM Role이 제공)
+├─ CloudFormation 배포 (배포 역할이 제공)
+└─ LocalStack 사용 (AWS 자격증명 불필요)
+```
 
 ### Q4: 프로덕션에서도 이렇게 설정해야 하나요?
 

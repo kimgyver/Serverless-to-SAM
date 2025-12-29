@@ -52,13 +52,13 @@ IAM 권한을 자동으로 설정하는 **실행 가능한 스크립트**입니�
 
 ```bash
 # 제한적 접근 (권장)
-./setup-iam-permissions.sh jasonkim restricted
+./scripts/setup-iam-permissions.sh jasonkim restricted
 
 # 전체 DynamoDB 접근
-./setup-iam-permissions.sh jasonkim full
+./scripts/setup-iam-permissions.sh jasonkim full
 
 # 기본값 사용 (jasonkim, restricted)
-./setup-iam-permissions.sh
+./scripts/setup-iam-permissions.sh
 ```
 
 **스크립트가 하는 일:**
@@ -75,7 +75,7 @@ IAM 권한을 자동으로 설정하는 **실행 가능한 스크립트**입니�
 ### 1단계: IAM 권한 설정
 
 ```bash
-./setup-iam-permissions.sh jasonkim restricted
+./scripts/setup-iam-permissions.sh jasonkim restricted
 ```
 
 ### 2단계: SAM 빌드
@@ -257,7 +257,7 @@ A:
 
 - [ ] `handlers/hello.js`의 리전이 "us-east-1"로 hardcoded됨
 - [ ] `.env.json` 파일이 생성됨
-- [ ] `./setup-iam-permissions.sh` 스크립트 실행됨
+- [ ] `./scripts/setup-iam-permissions.sh` 스크립트 실행됨
 - [ ] `sam build` 성공
 - [ ] `sam local invoke` 테스트 성공
 - [ ] DynamoDB 아이템이 실제 AWS에 생성됨
