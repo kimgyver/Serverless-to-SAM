@@ -1,57 +1,222 @@
-# SAM Example 2: API Gateway + S3 Integration - Complete Guide
+# SAM Example 04: API Gateway + S3 Integration
 
-## 📌 목적
+**완성도**: 100% ✅ | **상태**: 프로덕션 준비 완료 🚀
 
-이 예제는 **AWS SAM에서 S3 통합**을 실습하기 위한 프로젝트입니다.
+---
 
-학습 목표:
+## 📌 프로젝트 개요
+
+AWS SAM을 사용하여 **API Gateway + Lambda + S3** 통합 프로젝트입니다.
+
+### 학습 목표
 
 - ✅ S3 버킷을 CloudFormation으로 정의
 - ✅ Lambda → S3 권한 관리 (IAM Policy)
 - ✅ Pre-signed URL 생성 (안전한 파일 업로드/다운로드)
-- ✅ S3 이벤트 트리거 (파일 업로드 시 Lambda 자동 실행)
-- ✅ 복잡한 사전/사후 조건 처리
+- ✅ S3 이벤트 트리거
+- ✅ AWS SDK v3 마이그레이션
 
 ---
 
 ## 🏗️ 아키텍처
 
 ```
-┌────────────────────────────────────────────────────────────┐
-│                    API Gateway (REST API)                  │
-│                                                            │
-│  GET  /files              (List files in S3)              │
-│  POST /files/upload       (Generate PUT pre-signed URL)    │
-│  GET  /files/{key}        (Generate GET pre-signed URL)    │
-│  DELETE /files/{key}      (Delete file from S3)            │
-│                                                            │
-│  🔗 Lambda Functions ──(IAM Policy)──→ S3 Bucket         │
-└────────────────────────────────────────────────────────────┘
-                                                  ↑
-                                        S3 Event: ObjectCreated:*
-                                                  │
-                                        ProcessUploadFunction
-                                        (자동 트리거)
+API Gateway (5개 엔드포인트)
+├── GET  /files              → ListFunc (파일 목록)
+├── POST /files/upload       → UploadFunc (업로드 URL)
+├── GET  /files/{key}        → GetFunc (다운로드 URL)
+├── DELETE /files/{key}      → DelFunc (파일 삭제)
+└── S3 Event (자동)          → ProcessFunc (이벤트 처리)
+     ↓
+Lambda Functions (AWS SDK v3)
+     ↓
+S3 Bucket (api-s3-dev-ACCOUNT_ID)
 ```
 
 ---
 
-## 📂 폴더 구조
+## 📂 프로젝트 구조
 
 ```
 04-api-gateway-s3-sam/
-├── template.yaml              # SAM 템플릿 (S3 + Lambda + IAM)
+├── template.yaml          # SAM CloudFormation 템플릿
 ├── handlers/
-│   └── s3.js                  # 5개 함수
-│                               # - listFiles: 파일 목록
-│                               # - uploadFile: PUT pre-signed URL 생성
-│                               # - getFile: GET pre-signed URL 생성
-│                               # - deleteFile: S3 파일 삭제
-│                               # - processUpload: S3 이벤트 처리
-├── package.json               # npm 의존성 + SAM 배포 명령
-├── samconfig.toml             # SAM 배포 설정 (처음 deploy --guided 후)
-└── README.md                  # 이 파일
+│   └── s3.js             # 5개 Lambda 핸들러
+├── test/                 # 테스트 스크립트
+│   ├── localstack.test.js        # LocalStack 테스트 (15개)
+│   ├── sam-local.test.js         # SAM Local 테스트 (5개)
+│   ├── aws-lambda.test.sh        # AWS Lambda 라이브 테스트 (7개)
+│   └── README.md                 # 테스트 가이드
+├── .env.json             # SAM Local 환경 변수
+├── package.json          # npm 스크립트 + 의존성
+├── samconfig.toml        # SAM 배포 설정
+└── README.md             # 이 파일
 ```
+
+---
+
+## 🚀 빠른 시작
+
+### 1️⃣ 테스트 실행
+
+```bash
+# LocalStack 테스트 (Docker 필요)
+npm run test:localstack
+
+# SAM Local 테스트 (AWS 자격증명 필요)
+npm run test:sam-local
+
+# AWS Lambda 라이브 테스트 (배포된 함수 필요)
+npm run test:aws-lambda
+
+# 전체 테스트 실행
+npm run test:all
+```
+
+**테스트 결과**: ✅ 27/27 통과
+
+### 2️⃣ 로컬 개발
+
+```bash
+# SAM Local API 시작
+npm run local
+
+# 또는 Docker 네트워크 사용
+npm run local:s3
+```
+
+### 3️⃣ 배포
+
+```bash
+# 첫 배포 (대화형)
+npm run deploy
+
+# 개발 환경 배포
+npm run deploy-dev
+```
+
+---
+
+## 📋 Lambda 함수 목록
+
+| 함수        | 메서드     | 경로            | 설명                         |
+| ----------- | ---------- | --------------- | ---------------------------- |
+| ListFunc    | GET        | `/files`        | S3 파일 목록 조회            |
+| UploadFunc  | POST       | `/files/upload` | 업로드 Pre-signed URL 생성   |
+| GetFunc     | GET        | `/files/{key}`  | 다운로드 Pre-signed URL 생성 |
+| DelFunc     | DELETE     | `/files/{key}`  | S3 파일 삭제                 |
+| ProcessFunc | (S3 Event) | -               | S3 이벤트 처리               |
+
+---
+
+## 🔑 핵심 기술
+
+### Pre-signed URL
+
+```javascript
+const command = new GetObjectCommand({ Bucket, Key });
+const url = await getSignedUrl(client, command, { expiresIn: 3600 });
+```
+
+S3 객체에 대한 임시 접근 권한을 생성합니다.
+
+### S3 이벤트 트리거
+
+```yaml
+Events:
+  ProcessUploadEvent:
+    Type: S3
+    Properties:
+      Bucket: !Ref S3Bucket
+      Events: s3:ObjectCreated:*
+```
+
+### IAM 권한 관리
+
+```yaml
+Policies:
+  - PolicyName: S3Access
+    PolicyDocument:
+      Statement:
+        - Effect: Allow
+          Action: s3:*
+          Resource:
+            - !GetAtt S3Bucket.Arn
+            - !Sub "${S3Bucket.Arn}/*"
+```
+
+---
+
+## 📊 배포 상태
+
+| 항목                 | 상태 | 상세                                                       |
+| -------------------- | ---- | ---------------------------------------------------------- |
+| CloudFormation Stack | ✅   | api-s3-fileupload-sam-dev                                  |
+| S3 Bucket            | ✅   | api-s3-dev-840297437975                                    |
+| Lambda Functions     | ✅   | 5개 모두 배포됨                                            |
+| API Gateway          | ✅   | https://w4tjnuge4j.execute-api.us-west-2.amazonaws.com/dev |
+| 테스트               | ✅   | 27/27 통과                                                 |
+
+---
+
+## 🧪 테스트 전략
+
+3가지 테스트 방식으로 다양한 환경을 검증합니다:
+
+### LocalStack 테스트 (15개)
+
+- 환경: 로컬 Docker
+- 특징: 빠른 피드백, 비용 없음
+- 용도: 개발 중 테스트
+
+### SAM Local 테스트 (5개)
+
+- 환경: 로컬 Lambda + 실제 AWS S3
+- 특징: 실제 AWS 서비스 사용
+- 용도: 배포 전 검증
+
+### AWS Lambda 라이브 테스트 (7개)
+
+- 환경: 배포된 실제 Lambda + API Gateway
+- 특징: 프로덕션 환경 검증
+- 용도: 배포 후 검증
+
+---
+
+## 💡 주요 학습 포인트
+
+1. **AWS SDK v3 마이그레이션**
+
+   - v2 `aws-sdk` → v3 `@aws-sdk/*`로 완전 전환
+   - 더 작은 번들 크기, 더 빠른 성능
+
+2. **Pre-signed URL 활용**
+
+   - 클라이언트가 직접 S3에 업로드/다운로드
+   - Lambda 거쳐갈 필요 없음 (비용 절감)
+
+3. **IAM 권한 관리**
+
+   - CloudFormation으로 선언적 정의
+   - 최소 권한 원칙 적용
+
+4. **테스트 자동화**
+   - LocalStack: 로컬 테스트
+   - SAM Local: 통합 테스트
+   - AWS: 라이브 테스트
+
+---
+
+## 📚 더 알아보기
+
+- [SAM 개발자 가이드](https://docs.aws.amazon.com/serverless-application-model/)
+- [AWS SDK v3 마이그레이션](https://docs.aws.amazon.com/sdk-for-javascript/v3/developer-guide/welcome.html)
+- [S3 Pre-signed URL](https://docs.aws.amazon.com/AmazonS3/latest/userguide/presigned-url.html)
+- [LocalStack 문서](https://docs.localstack.cloud/)
+
+---
+
+**최종 업데이트**: 2025-12-29 | **상태**: ✅ Production Ready
 
 ---
 

@@ -7,7 +7,7 @@ const {
   createItem,
   updateItem,
   deleteItem
-} = require("./handlers/hello");
+} = require("../handlers/hello");
 
 // Complete test suite for all Lambda functions
 const runTests = async () => {

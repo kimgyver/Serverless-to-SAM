@@ -27,15 +27,12 @@ SAM Local 프로젝트에는 **2가지 테스트 방식**이 있습니다. 각�
 
 ```bash
 # 필수: LocalStack Docker 실행
-docker run -d -p 4566:4566 localstack/localstack
-
-# 또는 docker-compose 사용
 docker-compose up -d
 
 # 테스트 실행
 npm test
 # 또는
-node localstack-test-all.js
+node test/localstack.test.js
 ```
 
 **특징:**
@@ -60,7 +57,7 @@ aws configure
 sam build
 
 # 테스트 실행
-node sam-local-test-all.js
+node test/sam-local.test.js
 ```
 
 **특징:**
@@ -74,10 +71,12 @@ node sam-local-test-all.js
 
 ## 📌 선택 가이드
 
-### LocalStack (localstack-test-all.js) 사용하기
+### LocalStack (test/localstack.test.js) 사용하기
 
 ```bash
 npm test
+# 또는
+node test/localstack.test.js
 ```
 
 **언제 사용?**
@@ -95,10 +94,10 @@ npm test
 
 ---
 
-### AWS DynamoDB (sam-local-test-all.js) 사용하기
+### AWS DynamoDB (test/sam-local.test.js) 사용하기
 
 ```bash
-node sam-local-test-all.js
+node test/sam-local.test.js
 ```
 
 **언제 사용?**
@@ -112,7 +111,7 @@ node sam-local-test-all.js
 **예시:**
 
 ```
-개발 완료 → sam-local-test-all.js (10초) → 배포
+개발 완료 → node test/sam-local.test.js (10초) → 배포
 ```
 
 ---
@@ -125,7 +124,7 @@ node sam-local-test-all.js
 ┌─────────────────────────────────────────────────────────┐
 │ 1️⃣  로컬 개발 중 (자주)                                  │
 ├─────────────────────────────────────────────────────────┤
-│ npm test  (또는 node localstack-test-all.js)             │
+│ npm test  (또는 node test/localstack.test.js)            │
 │ • LocalStack 사용                                        │
 │ • 매우 빠름 (1-2초)                                      │
 │ • AWS 자격증명 불필요                                   │
@@ -140,7 +139,7 @@ node sam-local-test-all.js
 ┌─────────────────────────────────────────────────────────┐
 │ 3️⃣  배포 전 최종 검증 (1회)                              │
 ├─────────────────────────────────────────────────────────┤
-│ node sam-local-test-all.js  ← AWS DynamoDB로 최종 검증   │
+│ node test/sam-local.test.js  ← AWS DynamoDB로 최종 검증  │
 │ • 실제 AWS 환경                                          │
 │ • 네트워크 지연 포함                                     │
 │ • 프로덕션 환경과 동일                                   │
@@ -235,7 +234,7 @@ AWS DynamoDB (실제 클라우드)
 ✅ npm test (LocalStack)
    └─ 17/17 테스트 성공
 
-✅ node sam-local-test-all.js (AWS DynamoDB)
+✅ node test/sam-local.test.js (AWS DynamoDB)
    └─ 8/8 함수 성공
       ├─ 4/4 일반 함수 (SayHello, Greet, CreateMessage, Divide)
       └─ 4/4 DynamoDB 함수 (Create, List, Update, Delete)
@@ -254,7 +253,7 @@ AWS DynamoDB (실제 클라우드)
 │  └─ npm test (LocalStack)
 │
 ├─ 배포 준비 됨
-│  └─ node sam-local-test-all.js (AWS DynamoDB)
+│  └─ node test/sam-local.test.js (AWS DynamoDB)
 │
 └─ 배포 직전
    └─ sam deploy (실제 프로덕션)
@@ -270,16 +269,16 @@ AWS DynamoDB (실제 클라우드)
 
 ## 💡 핵심 정리
 
-| 단계         | 명령어                       | 용도           |
-| ------------ | ---------------------------- | -------------- |
-| **개발 중**  | `npm test`                   | 빠른 반복 개발 |
-| **배포 전**  | `node sam-local-test-all.js` | 최종 검증      |
-| **프로덕션** | `sam deploy`                 | 실제 배포      |
+| 단계         | 명령어                        | 용도           |
+| ------------ | ----------------------------- | -------------- |
+| **개발 중**  | `npm test`                    | 빠른 반복 개발 |
+| **배포 전**  | `node test/sam-local.test.js` | 최종 검증      |
+| **프로덕션** | `sam deploy`                  | 실제 배포      |
 
 **둘 다 의미가 있습니다!**
 
-- `localstack-test-all.js`: 🚀 빠른 개발 사이클
-- `sam-local-test-all.js`: ✅ 프로덕션 검증
+- `test/localstack.test.js`: 🚀 빠른 개발 사이클
+- `test/sam-local.test.js`: ✅ 프로덕션 검증
 
 프로젝트 성숙도에 따라 선택하면 됩니다! 🎉
 

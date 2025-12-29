@@ -1,7 +1,15 @@
-// Copy of handlers/s3.js from example 02-api-gateway-s3
-// (Same implementation works for both Serverless and SAM)
+// AWS S3 Handler using AWS SDK v3
+// Migrated from aws-sdk v2 to @aws-sdk/client-s3 for Node.js 18 Lambda runtime
 
-const AWS = require("aws-sdk");
+const {
+  S3Client,
+  ListObjectsV2Command,
+  GetObjectCommand,
+  DeleteObjectCommand,
+  PutObjectCommand,
+  HeadObjectCommand
+} = require("@aws-sdk/client-s3");
+const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 
 // ============================================
 // Utility Functions
@@ -45,21 +53,28 @@ const createResponse = (statusCode, body, headers = {}) => ({
 });
 
 // ============================================
-// S3 Client
+// S3 Client Initialization
 // ============================================
 
+let s3Client = null;
+
 const getS3Client = () => {
-  const config = {
-    region: process.env.BUCKET_REGION || process.env.AWS_REGION
+  if (s3Client) return s3Client;
+
+  // Hardcode region for SAM Local consistency (similar to DynamoDB fix)
+  const clientConfig = {
+    region: "us-west-2"
   };
 
-  // For local testing with localstack or s3-local
+  // For local testing with LocalStack (overrides hardcoded region)
   if (process.env.S3_LOCAL_ENDPOINT) {
-    config.endpoint = process.env.S3_LOCAL_ENDPOINT;
-    config.s3ForcePathStyle = true;
+    clientConfig.endpoint = process.env.S3_LOCAL_ENDPOINT;
+    clientConfig.region = process.env.AWS_REGION || "us-west-2";
+    clientConfig.forcePathStyle = true;
   }
 
-  return new AWS.S3(config);
+  s3Client = new S3Client(clientConfig);
+  return s3Client;
 };
 
 // ============================================
@@ -85,7 +100,8 @@ exports.listFiles = async (event, context) => {
       params.Prefix = event.queryStringParameters.prefix;
     }
 
-    const data = await s3.listObjectsV2(params).promise();
+    const command = new ListObjectsV2Command(params);
+    const data = await s3.send(command);
 
     const files = (data.Contents || []).map(obj => ({
       key: obj.Key,
@@ -152,24 +168,27 @@ exports.uploadFile = async (event, context) => {
     const bucketName = process.env.BUCKET_NAME;
     const expirySeconds = parseInt(process.env.SIGNED_URL_EXPIRY || "3600", 10);
 
+    const key = `uploads/${Date.now()}-${fileName}`;
     const params = {
       Bucket: bucketName,
-      Key: `uploads/${Date.now()}-${fileName}`,
-      ContentType: contentType || "application/octet-stream",
-      Expires: expirySeconds
+      Key: key,
+      ContentType: contentType || "application/octet-stream"
     };
 
-    const uploadUrl = s3.getSignedUrl("putObject", params);
+    const command = new PutObjectCommand(params);
+    const uploadUrl = await getSignedUrl(s3, command, {
+      expiresIn: expirySeconds
+    });
 
     logger.log("Generated pre-signed URL", {
-      key: params.Key,
+      key,
       expirySeconds
     });
 
     return createResponse(200, {
       uploadUrl,
       bucket: bucketName,
-      key: params.Key,
+      key,
       expiresIn: expirySeconds,
       instructions: "Use PUT request with the uploadUrl to upload file"
     });
@@ -206,17 +225,18 @@ exports.getFile = async (event, context) => {
     const bucketName = process.env.BUCKET_NAME;
     const expirySeconds = parseInt(process.env.SIGNED_URL_EXPIRY || "3600", 10);
 
-    const params = {
-      Bucket: bucketName,
-      Key: key,
-      Expires: expirySeconds
-    };
-
     // Verify object exists
     try {
-      await s3.headObject({ Bucket: bucketName, Key: key }).promise();
+      const headCommand = new HeadObjectCommand({
+        Bucket: bucketName,
+        Key: key
+      });
+      await s3.send(headCommand);
     } catch (headError) {
-      if (headError.code === "NotFound") {
+      if (
+        headError.name === "NotFound" ||
+        headError.$metadata?.httpStatusCode === 404
+      ) {
         logger.error("File not found", { key });
         return createResponse(404, {
           error: "Not Found",
@@ -226,7 +246,15 @@ exports.getFile = async (event, context) => {
       throw headError;
     }
 
-    const downloadUrl = s3.getSignedUrl("getObject", params);
+    const params = {
+      Bucket: bucketName,
+      Key: key
+    };
+
+    const command = new GetObjectCommand(params);
+    const downloadUrl = await getSignedUrl(s3, command, {
+      expiresIn: expirySeconds
+    });
 
     logger.log("Generated download URL", {
       key,
@@ -272,12 +300,33 @@ exports.deleteFile = async (event, context) => {
     const s3 = getS3Client();
     const bucketName = process.env.BUCKET_NAME;
 
-    const params = {
+    // Verify object exists first
+    try {
+      const headCommand = new HeadObjectCommand({
+        Bucket: bucketName,
+        Key: key
+      });
+      await s3.send(headCommand);
+    } catch (headError) {
+      if (
+        headError.name === "NotFound" ||
+        headError.$metadata?.httpStatusCode === 404
+      ) {
+        logger.error("File not found", { key });
+        return createResponse(404, {
+          error: "Not Found",
+          message: `File not found: ${key}`
+        });
+      }
+      throw headError;
+    }
+
+    const command = new DeleteObjectCommand({
       Bucket: bucketName,
       Key: key
-    };
+    });
 
-    await s3.deleteObject(params).promise();
+    await s3.send(command);
 
     logger.log("File deleted successfully", { key });
 
@@ -329,17 +378,22 @@ exports.processUpload = async (event, context) => {
 
       try {
         // Get object metadata
-        const headResponse = await s3
-          .headObject({ Bucket: bucketName, Key: key })
-          .promise();
+        const headCommand = new HeadObjectCommand({
+          Bucket: bucketName,
+          Key: key
+        });
+        const headResponse = await s3.send(headCommand);
 
         // Read object content (assuming JSON)
         let content = {};
         if (key.endsWith(".json")) {
-          const getResponse = await s3
-            .getObject({ Bucket: bucketName, Key: key })
-            .promise();
-          content = JSON.parse(getResponse.Body.toString());
+          const getCommand = new GetObjectCommand({
+            Bucket: bucketName,
+            Key: key
+          });
+          const getResponse = await s3.send(getCommand);
+          const bodyText = await getResponse.Body.transformToString();
+          content = JSON.parse(bodyText);
         }
 
         const result = {

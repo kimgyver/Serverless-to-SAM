@@ -72,9 +72,12 @@ POST /item/{id}    PUT /item/{id}     DELETE /item/{id}
 03-hello-world-sam/
 ├── template.yaml              # SAM 템플릿 (CloudFormation 변환됨)
 ├── handlers/
-│   └── hello.js               # 4개 함수: sayHello, greet, createMessage, divide
+│   └── hello.js               # 8개 함수: 기본 4개 + DynamoDB CRUD 4개
+│                              # - 기본: sayHello, greet, createMessage, divide
+│                              # - CRUD: createItem, listItems, updateItem, deleteItem
 ├── package.json               # npm 의존성 + SAM 배포 명령
 ├── samconfig.toml             # SAM 배포 설정 (처음 deploy --guided 후 생성)
+├── docker-compose.yml         # LocalStack 설정 (로컬 DynamoDB)
 └── README.md                  # 이 파일
 ```
 
@@ -241,6 +244,10 @@ Mounting SayHelloFunction at http://127.0.0.1:3000/say-hello [GET]
 Mounting GreetFunction at http://127.0.0.1:3000/greet/{name} [GET]
 Mounting CreateMessageFunction at http://127.0.0.1:3000/message [POST]
 Mounting DivideFunction at http://127.0.0.1:3000/divide [POST]
+Mounting CreateItemFunction at http://127.0.0.1:3000/item [POST]
+Mounting ListItemsFunction at http://127.0.0.1:3000/items [GET]
+Mounting UpdateItemFunction at http://127.0.0.1:3000/item/{id} [PUT]
+Mounting DeleteItemFunction at http://127.0.0.1:3000/item/{id} [DELETE]
 ```
 
 #### 로컬 테스트 명령어 (다른 터미널에서)
@@ -273,16 +280,48 @@ curl -X POST http://localhost:3000/divide \
 
 # ✅ 응답:
 # {"dividend":10,"divisor":2,"result":5,"timestamp":"2025-12-27T22:24:49.879Z","stage":"dev"}
+
+# DynamoDB CRUD 테스트 (SAM Local에서도 로컬 DynamoDB 사용)
+
+# 5️⃣ POST /item - 새 항목 생성
+curl -X POST http://localhost:3000/item \
+  -H "Content-Type: application/json" \
+  -d '{"title":"SAM Local Item","description":"Created via SAM Local"}'
+
+# ✅ 응답:
+# {"id":"item-1735438825000","title":"SAM Local Item","description":"Created via SAM Local","createdAt":"2025-12-28T...","stage":"dev"}
+
+# 6️⃣ GET /items - 모든 항목 조회
+curl http://localhost:3000/items
+
+# ✅ 응답:
+# {"items":[{"id":"item-1735438825000","title":"SAM Local Item",...}],"count":1,"stage":"dev"}
+
+# 7️⃣ PUT /item/{id} - 항목 수정
+curl -X PUT http://localhost:3000/item/item-1735438825000 \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Updated Item","description":"Modified"}'
+
+# ✅ 응답: {"id":"item-1735438825000",...}
+
+# 8️⃣ DELETE /item/{id} - 항목 삭제
+curl -X DELETE http://localhost:3000/item/item-1735438825000
+
+# ✅ 응답: {"message":"Item deleted","id":"item-1735438825000",...}
 ```
 
 #### 로컬 테스트 결과 요약
 
 | 함수          | 경로            | 메서드 | 상태    | 테스트됨   |
 | ------------- | --------------- | ------ | ------- | ---------- |
-| SayHello      | `/say-hello`    | GET    | ✅ 정상 | 2025-12-28 |
-| Greet         | `/greet/{name}` | GET    | ✅ 정상 | 2025-12-28 |
-| CreateMessage | `/message`      | POST   | ✅ 정상 | 2025-12-28 |
-| Divide        | `/divide`       | POST   | ✅ 정상 | 2025-12-28 |
+| SayHello      | `/say-hello`    | GET    | ✅ 정상 | 2025-12-29 |
+| Greet         | `/greet/{name}` | GET    | ✅ 정상 | 2025-12-29 |
+| CreateMessage | `/message`      | POST   | ✅ 정상 | 2025-12-29 |
+| Divide        | `/divide`       | POST   | ✅ 정상 | 2025-12-29 |
+| CreateItem    | `/item`         | POST   | ✅ 정상 | 2025-12-29 |
+| ListItems     | `/items`        | GET    | ✅ 정상 | 2025-12-29 |
+| UpdateItem    | `/item/{id}`    | PUT    | ✅ 정상 | 2025-12-29 |
+| DeleteItem    | `/item/{id}`    | DELETE | ✅ 정상 | 2025-12-29 |
 
 **주의사항**:
 
@@ -445,7 +484,7 @@ aws s3 ls | grep aws-sam-cli-artifacts
 
 ---
 
-## ✅ 테스트 완료 현황 (2025-12-28)
+## ✅ 테스트 완료 현황 (2025-12-29)
 
 ### 로컬 테스트 ✅
 
@@ -462,7 +501,7 @@ aws s3 ls | grep aws-sam-cli-artifacts
    - CreateMessage ✅
    - Divide ✅
 
-2️⃣ DynamoDB CRUD (7개)
+2️⃣ DynamoDB CRUD (8개)
    - CreateItem ✅
    - ListItems ✅
    - UpdateItem ✅
@@ -488,21 +527,36 @@ aws s3 ls | grep aws-sam-cli-artifacts
 - package.json 의존성: ✅ 정리 완료
 - handlers/hello.js: ✅ 준비 완료
 - samconfig.toml: 배포 시 자동 생성됨
-  npm run deploy-staging
-  npm run deploy-prod
 
+### AWS Lambda 라이브 테스트 ✅
+
+**배포된 스택에서 8/8 함수 테스트 통과**:
+
+```
+✅ 성공: 8/8
+❌ 실패: 0/8
+
+API Gateway 엔드포인트: https://s02mbsgudc.execute-api.us-west-2.amazonaws.com/dev
+
+테스트된 함수:
+1️⃣ SayHello ... ✅ (200)
+2️⃣ Greet ... ✅ (200)
+3️⃣ CreateMessage ... ✅ (201)
+4️⃣ Divide ... ✅ (200)
+5️⃣ CreateItem (DynamoDB) ... ✅ (201)
+6️⃣ ListItems (DynamoDB) ... ✅ (200)
+7️⃣ UpdateItem (DynamoDB) ... ✅ (200)
+8️⃣ DeleteItem (DynamoDB) ... ✅ (200)
 ```
 
 배포 후 출력:
 
 ```
-
 CloudFormation outputs from deployed stack
 Key Value
-HelloWorldApiEndpoint https://abc123.execute-api.us-east-1.amazonaws.com/dev
-SayHelloFunctionArn arn:aws:lambda:us-east-1:123456:function:hello-world-say-hello-dev
-
-````
+HelloWorldApiEndpoint https://s02mbsgudc.execute-api.us-west-2.amazonaws.com/dev
+SayHelloFunctionArn arn:aws:lambda:us-west-2:123456:function:hello-world-say-hello-dev
+```
 
 배포된 API 테스트:
 
@@ -524,7 +578,25 @@ curl -X POST $API_ENDPOINT/message \
 curl -X POST $API_ENDPOINT/divide \
   -H "Content-Type: application/json" \
   -d '{"dividend":20,"divisor":4}'
-````
+
+# DynamoDB CRUD 테스트
+
+# 1️⃣ POST /item - 새 항목 생성
+curl -X POST $API_ENDPOINT/item \
+  -H "Content-Type: application/json" \
+  -d '{"title":"New Item","description":"Test item"}'
+
+# 2️⃣ GET /items - 모든 항목 조회
+curl $API_ENDPOINT/items
+
+# 3️⃣ PUT /item/{id} - 항목 수정
+curl -X PUT $API_ENDPOINT/item/item-123 \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Updated Item","description":"Modified"}'
+
+# 4️⃣ DELETE /item/{id} - 항목 삭제
+curl -X DELETE $API_ENDPOINT/item/item-123
+```
 
 ---
 
@@ -801,14 +873,14 @@ curl -X POST http://localhost:3000/divide \
 # Response: { "result": 5 }
 ```
 
-**테스트**:
+**테스트 - 에러 케이스 (0으로 나누기)**:
 
 ```bash
 curl -X POST http://localhost:3000/divide \
   -H "Content-Type: application/json" \
-  -d '{"dividend":10,"divisor":2}'
+  -d '{"dividend":10,"divisor":0}'
 
-# Response: { "result": 5 }
+# Response: { "error": "divisor cannot be 0" }
 ```
 
 ---
@@ -1544,32 +1616,9 @@ aws dynamodb create-table \
 
 ---
 
-### 구성 파일
+## 🔐 IAM 역할 정의
 
-**docker-compose.yml**:
-
-**docker-compose.yml** (현재 설정):
-
-```yaml
-version: "3.8"
-services:
-  localstack:
-    image: localstack/localstack:latest
-    container_name: localstack-hello-world
-    ports:
-      - "4566:4566"
-    environment:
-      SERVICES: dynamodb
-      DEBUG: 0
-      AWS_DEFAULT_REGION: us-west-2
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-```
-
----
+### template.yaml의 LambdaExecutionRole
 
 ```yaml
 LambdaExecutionRole:

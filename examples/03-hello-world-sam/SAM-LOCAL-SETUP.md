@@ -1,6 +1,8 @@
 # SAM Local Development Setup Guide
 
-이 가이드는 SAM Local을 사용하여 AWS DynamoDB와 연동하여 로컬에서 Lambda 함수를 테스트하는 방법을 설명합니다.
+> **참고**: SAM Local의 3가지 핵심 변경사항에 대한 상세 설명은 [SAM-LOCAL-AWS-DYNAMODB-FIX.md](./SAM-LOCAL-AWS-DYNAMODB-FIX.md)를 참고하세요.
+
+이 가이드는 SAM Local을 사용하여 AWS DynamoDB와 연동하여 로컬에서 Lambda 함수를 테스트하는 **단계별 실행 방법**을 설명합니다.
 
 ## 📋 전제 조건
 
@@ -12,113 +14,45 @@
 
 ## 🔑 1단계: IAM 권한 설정
 
-### 옵션 A: 자동 설정 (권장)
+> **상세 정보**: [SAM-LOCAL-AWS-DYNAMODB-FIX.md](./SAM-LOCAL-AWS-DYNAMODB-FIX.md)의 "3️⃣ IAM 사용자 권한 추가" 섹션을 참고하세요.
 
-#### 방법 1 - 특정 테이블만 접근 (제한적, 안전)
+### 빠른 설정 (자동 스크립트)
 
 ```bash
+# 제한적 접근 (권장, 안전)
 ./setup-iam-permissions.sh jasonkim restricted
-```
 
-**설정되는 권한:**
-
-- `dynamodb:GetItem`, `PutItem`, `UpdateItem`, `DeleteItem`
-- `dynamodb:Scan`, `Query`, `BatchGetItem`, `BatchWriteItem`
-- 테이블: `sam-hello-world-items*` 패턴만 접근 가능
-
-#### 방법 2 - 모든 DynamoDB 접근 (광범위)
-
-```bash
+# 또는 전체 DynamoDB 접근 (개발 초기)
 ./setup-iam-permissions.sh jasonkim full
-```
-
-**설정되는 권한:**
-
-- 모든 DynamoDB 작업 (권장하지 않음 - 프로덕션용 아님)
-
-### 옵션 B: 수동 설정
-
-```bash
-# 방법 1 - 제한적 접근
-aws iam put-user-policy \
-  --user-name jasonkim \
-  --policy-name DynamoDBSAMDevPolicy \
-  --policy-document '{
-    "Version": "2012-10-17",
-    "Statement": [
-      {
-        "Effect": "Allow",
-        "Action": [
-          "dynamodb:GetItem",
-          "dynamodb:PutItem",
-          "dynamodb:UpdateItem",
-          "dynamodb:DeleteItem",
-          "dynamodb:Scan",
-          "dynamodb:Query"
-        ],
-        "Resource": "arn:aws:dynamodb:us-east-1:*:table/sam-hello-world-items*"
-      }
-    ]
-  }'
-
-# 방법 2 - 전체 접근
-aws iam attach-user-policy \
-  --user-name jasonkim \
-  --policy-arn arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
 ```
 
 ### ✅ 권한 확인
 
 ```bash
-# 사용자가 가진 정책 확인
+# 사용자의 정책 확인
 aws iam list-attached-user-policies --user-name jasonkim
-
-# Inline 정책 확인
 aws iam list-user-policies --user-name jasonkim
-
-# 특정 정책 상세 정보
-aws iam get-user-policy --user-name jasonkim --policy-name DynamoDBSAMDevPolicy
 ```
 
 ## 🏗️ 2단계: 핵심 설정 확인
 
-### .env.json 파일 확인
+> **상세 정보**: [SAM-LOCAL-AWS-DYNAMODB-FIX.md](./SAM-LOCAL-AWS-DYNAMODB-FIX.md)의 다음 섹션을 참고하세요:
+>
+> - 1️⃣ DynamoDB 리전 Hardcoding
+> - 2️⃣ 환경변수 파일 생성
 
-SAM Local은 환경변수를 완벽하게 상속받지 못하므로, 명시적으로 설정해야 합니다:
+### 필수 체크리스트
 
-```json
-{
-  "CreateItemFunction": {
-    "ITEMS_TABLE": "sam-hello-world-items-dev",
-    "STAGE": "dev",
-    "ENVIRONMENT": "development"
-  },
-  "ListItemsFunction": {
-    "ITEMS_TABLE": "sam-hello-world-items-dev",
-    "STAGE": "dev",
-    "ENVIRONMENT": "development"
-  },
-  "UpdateItemFunction": {
-    "ITEMS_TABLE": "sam-hello-world-items-dev",
-    "STAGE": "dev",
-    "ENVIRONMENT": "development"
-  },
-  "DeleteItemFunction": {
-    "ITEMS_TABLE": "sam-hello-world-items-dev",
-    "STAGE": "dev",
-    "ENVIRONMENT": "development"
-  }
-}
-```
+```bash
+# 1. .env.json 파일 존재 확인
+ls -la .env.json
 
-### handlers/hello.js 확인
+# 2. handlers/hello.js에서 리전이 hardcoded되었는지 확인
+grep 'region:' handlers/hello.js
+# 출력 예: const dynamodbConfig = { region: "us-east-1" }
 
-DynamoDB 리전이 명시적으로 설정되어 있는지 확인:
-
-```javascript
-const dynamodbConfig = {
-  region: "us-east-1" // ← 반드시 hardcoded여야 함
-};
+# 3. DynamoDB 테이블 존재 확인
+aws dynamodb describe-table --table-name sam-hello-world-items-dev
 ```
 
 ## 🚀 3단계: SAM Local 실행
@@ -307,16 +241,16 @@ SAM Local 실행 흐름:
 └─────────────────────────────────────┘
 ```
 
-## ✅ 체크리스트
+## ✅ 최종 체크리스트
 
 - [ ] AWS CLI 설정 완료 (`aws configure`)
-- [ ] IAM 권한 설정 완료 (./setup-iam-permissions.sh 실행)
-- [ ] .env.json 파일 존재
-- [ ] handlers/hello.js에서 region이 "us-east-1"로 hardcoded
-- [ ] DynamoDB 테이블 존재 (sam-hello-world-items-dev)
-- [ ] Docker 실행 중
-- [ ] `sam build` 성공
-- [ ] `sam local invoke` 테스트 성공
+- [ ] IAM 권한 설정 완료 (`./setup-iam-permissions.sh` 실행)
+- [ ] `.env.json` 파일 존재 및 올바른 내용
+- [ ] `handlers/hello.js`에서 region이 "us-east-1"로 hardcoded
+- [ ] DynamoDB 테이블 존재 (`aws dynamodb list-tables` 확인)
+- [ ] Docker 실행 중 (`docker ps` 확인)
+- [ ] `sam build` 성공 (`.aws-sam/` 디렉토리 생성)
+- [ ] `sam local invoke` 테스트 성공 (JSON 응답 확인)
 
 ## 📚 참고자료
 

@@ -4,7 +4,11 @@
   "description": "SAM Example 2: API Gateway + S3 Integration",
   "main": "handlers/s3.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test:localstack": "AWS_REGION=us-west-2 ITEMS_TABLE=api-s3-fileupload-local DYNAMODB_ENDPOINT=http://localhost:4566 S3_LOCAL_ENDPOINT=http://localhost:4566 node test/localstack.test.js",
+    "test:sam-local": "node test/sam-local.test.js",
+    "test:aws-lambda": "bash -c 'ENDPOINT=$(aws cloudformation describe-stacks --stack-name api-s3-fileupload-sam-dev --region us-west-2 --query \"Stacks[0].Outputs[0].OutputValue\" --output text 2>/dev/null) && if [ ! -z \"$ENDPOINT\" ] && [ \"$ENDPOINT\" != \"None\" ]; then export API_ENDPOINT=\"$ENDPOINT\" && bash test/aws-lambda.test.sh; else echo \"❌ API endpoint not found. Deploy the stack first: npm run deploy-dev\"; exit 1; fi'",
+    "test": "npm run test:localstack",
+    "test:all": "npm run test:localstack && npm run test:sam-local && npm run test:aws-lambda",
     "build": "sam build",
     "local": "sam local start-api --port 3000",
     "local:s3": "npm run local -- --docker-network sam-learning",
@@ -24,9 +28,8 @@
   "author": "Your Name",
   "license": "MIT",
   "dependencies": {
-    "aws-sdk": "^2.1400.0"
+    "@aws-sdk/client-s3": "^3.500.0",
+    "@aws-sdk/s3-request-presigner": "^3.500.0"
   },
-  "devDependencies": {
-    "aws-sam-cli": "^1.80.0"
-  }
+  "devDependencies": {}
 }

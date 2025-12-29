@@ -74,7 +74,10 @@ Resources:
                   - dynamodb:UpdateItem
                   - dynamodb:DeleteItem
                   - dynamodb:Scan
-                Resource: !GetAtt ItemsTable.Arn
+                  - dynamodb:Query
+                Resource:
+                  - !GetAtt ItemsTable.Arn
+                  - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/sam-hello-world-items-*"
 
   # ============================================
   # CloudWatch Logs Role for API Gateway

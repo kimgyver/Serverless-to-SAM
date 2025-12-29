@@ -1,0 +1,9 @@
+version = 0.1
+
+[default.deploy.parameters]
+stack_name = "api-s3-fileupload-sam-dev"
+region = "us-west-2"
+s3_bucket = "sam-deployment-bucket-840297437975-west"
+capabilities = "CAPABILITY_IAM"
+confirm_changeset = false
+parameter_overrides = "Stage=dev"
