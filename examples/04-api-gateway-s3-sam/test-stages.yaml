@@ -1,0 +1,28 @@
+#!/bin/bash
+
+echo "=== Stage별 FindInMap 값 검증 ==="
+echo ""
+
+# Python을 이용해 YAML 파싱 및 FindInMap 시뮬레이션
+python3 << 'PYTHON'
+import yaml
+
+with open('template.yaml', 'r') as f:
+    template = yaml.safe_load(f)
+
+mappings = template['Mappings']['StageConfig']
+
+stages = ['dev', 'staging', 'prod']
+
+for stage in stages:
+    config = mappings[stage]
+    print(f"📦 Stage: {stage}")
+    print(f"   - Timeout: {config['Timeout']}초")
+    print(f"   - MemorySize: {config['MemorySize']}MB")
+    print(f"   - LogRetentionDays: {config['LogRetentionDays']}일")
+    print(f"   - LifecycleDays: {config['LifecycleDays']}일")
+    print(f"   - CorsOrigin: {config['CorsOrigin']}")
+    print(f"   - EnableXRay: {config['EnableXRay']}")
+    print()
+
+PYTHON

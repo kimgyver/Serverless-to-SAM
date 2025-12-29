@@ -55,21 +55,131 @@ S3 Bucket (api-s3-dev-ACCOUNT_ID)
 
 ---
 
+## ⚙️ Stage별 설정 관리 (핵심 학습)
+
+이 프로젝트는 **CloudFormation Mappings + !FindInMap**을 사용하여 Stage별 설정을 효율적으로 관리합니다.
+
+### 🎯 문제: Serverless Framework vs SAM
+
+**Serverless Framework 방식:**
+
+```yaml
+custom:
+  stages:
+    dev:
+      memorySize: 256
+      timeout: 30
+    prod:
+      memorySize: 1024
+      timeout: 120
+
+functions:
+  myFunction:
+    memorySize: ${self:custom.stages.${self:provider.stage}.memorySize}
+```
+
+**SAM/CloudFormation 방식:**
+
+```yaml
+Mappings:
+  StageConfig:
+    dev:
+      MemorySize: 256
+      Timeout: 30
+    prod:
+      MemorySize: 1024
+      Timeout: 120
+
+Parameters:
+  Stage:
+    Type: String
+    Default: dev
+
+Functions:
+  MyFunction:
+    Properties:
+      MemorySize: !FindInMap [StageConfig, !Ref Stage, MemorySize]
+      Timeout: !FindInMap [StageConfig, !Ref Stage, Timeout]
+```
+
+### 📊 !FindInMap이란?
+
+```
+!FindInMap [TableName, RowKey, ColumnKey]
+           ↓          ↓        ↓
+         표 이름    행 선택   열 선택
+```
+
+**동작 원리:**
+
+```
+Mappings:
+  StageConfig:        ← TableName
+    dev:              ← RowKey (Stage 파라미터)
+      Timeout: 30     ← ColumnKey (Timeout)
+      MemorySize: 256 ← ColumnKey (MemorySize)
+
+!FindInMap [StageConfig, dev, Timeout]
+  → Mappings.StageConfig.dev.Timeout
+  → 30
+```
+
+**실제 사용:**
+
+```bash
+# dev 환경 배포
+sam deploy --parameter-overrides Stage=dev
+
+# prod 환경 배포
+sam deploy --parameter-overrides Stage=prod
+```
+
+### 📋 현재 설정 (template.yaml)
+
+| Stage   | Timeout | MemorySize | LogRetention | Lifecycle | LogLevel |
+| ------- | ------- | ---------- | ------------ | --------- | -------- |
+| dev     | 30초    | 256MB      | 3일          | 7일       | INFO     |
+| staging | 60초    | 512MB      | 7일          | 15일      | INFO     |
+| prod    | 120초   | 1024MB     | 30일         | 90일      | WARN     |
+
+**각 Stage마다:**
+
+- Lambda 함수의 메모리/타임아웃이 자동으로 조정됨
+- S3 Lifecycle 정책이 달라짐 (비용 최적화)
+- 로그 보관 기간이 달라짐
+- X-Ray 추적 활성화 여부가 달라짐 (staging/prod만 활성화)
+
+---
+
 ## 🚀 빠른 시작
+
+### 0️⃣ 준비 (LocalStack 시작)
+
+```bash
+# LocalStack 컨테이너 시작 (처음 한 번만)
+docker-compose up -d
+
+# LocalStack 상태 확인
+curl -s http://localhost:4566/_localstack/health | jq '.services.s3'
+# 출력: "available" 이면 준비 완료!
+
+# 종료할 때:
+docker-compose down
+```
 
 ### 1️⃣ 테스트 실행
 
 ```bash
-# LocalStack 테스트 (Docker 필요)
+# LocalStack 테스트 (15개 - Docker 필요)
 npm run test:localstack
 
-# SAM Local 테스트 (AWS 자격증명 필요)
+# SAM Local 테스트 (5개 - AWS 자격증명 필요)
 npm run test:sam-local
 
-# AWS Lambda 라이브 테스트 (배포된 함수 필요)
+# AWS Lambda 라이브 테스트 (7개 - 배포된 함수 필요)
 npm run test:aws-lambda
 
-# 전체 테스트 실행
+# 전체 테스트 실행 (27개 모두)
 npm run test:all
 ```
 
@@ -78,21 +188,81 @@ npm run test:all
 ### 2️⃣ 로컬 개발
 
 ```bash
-# SAM Local API 시작
+# SAM Local API 시작 (포트 3000)
 npm run local
 
-# 또는 Docker 네트워크 사용
+# 또는 Docker 네트워크 사용 (S3 연동)
 npm run local:s3
 ```
 
-### 3️⃣ 배포
+### 3️⃣ 배포 (Stage별 설정 적용)
+
+**SAM은 배포 시 Stage 파라미터를 지정하면 Mappings 테이블에서 해당 행의 값을 자동으로 적용합니다:**
 
 ```bash
-# 첫 배포 (대화형)
+# 첫 배포 (대화형 - 설정값 입력)
 npm run deploy
 
-# 개발 환경 배포
+# 개발 환경 배포 (개발용 설정 자동 적용)
 npm run deploy-dev
+# 실제 명령: sam deploy --guided --parameter-overrides Stage=dev
+
+# 스테이징 환경 배포
+npm run deploy-staging
+# 실제 명령: sam deploy --parameter-overrides Stage=staging
+
+# 프로덕션 환경 배포
+npm run deploy-prod
+# 실제 명령: sam deploy --parameter-overrides Stage=prod --capabilities CAPABILITY_NAMED_IAM
+```
+
+**각 Stage별 적용되는 설정** (template.yaml의 Mappings에서):
+
+| 설정                | dev    | staging | prod    |
+| ------------------- | ------ | ------- | ------- |
+| **MemorySize**      | 256 MB | 512 MB  | 1024 MB |
+| **Timeout**         | 30초   | 60초    | 120초   |
+| **LogRetention**    | 3일    | 7일     | 30일    |
+| **S3 Lifecycle**    | 7일    | 15일    | 90일    |
+| **X-Ray Tracing**   | 비활성 | 활성    | 활성    |
+| **CloudWatch 로그** | 최소   | 중간    | 상세    |
+
+```yaml
+# template.yaml의 Mappings 구조
+Mappings:
+  StageConfig:
+    dev:
+      MemorySize: 256
+      Timeout: 30
+      LogRetentionDays: 3
+      LifecycleDays: 7
+      EnableXRay: "false"
+    staging:
+      MemorySize: 512
+      Timeout: 60
+      LogRetentionDays: 7
+      LifecycleDays: 15
+      EnableXRay: "true"
+    prod:
+      MemorySize: 1024
+      Timeout: 120
+      LogRetentionDays: 30
+      LifecycleDays: 90
+      EnableXRay: "true"
+```
+
+**배포 후 확인:**
+
+```bash
+# 배포된 Stack 확인
+aws cloudformation describe-stacks --stack-name api-s3-fileupload-sam-dev
+
+# 스택의 리소스 확인
+aws cloudformation list-stack-resources --stack-name api-s3-fileupload-sam-dev
+
+# API 엔드포인트 확인
+aws cloudformation describe-stacks --stack-name api-s3-fileupload-sam-dev \
+  --query 'Stacks[0].Outputs' --output table
 ```
 
 ---
@@ -106,6 +276,48 @@ npm run deploy-dev
 | GetFunc     | GET        | `/files/{key}`  | 다운로드 Pre-signed URL 생성 |
 | DelFunc     | DELETE     | `/files/{key}`  | S3 파일 삭제                 |
 | ProcessFunc | (S3 Event) | -               | S3 이벤트 처리               |
+
+---
+
+## 🚀 Stage별 성능 특성
+
+**메모리와 타임아웃이 Stage별로 다르므로, 같은 코드도 stage별로 다른 성능을 보입니다:**
+
+### 개발 환경 (dev) - 빠른 반복, 최소 비용
+
+```
+- Lambda 메모리: 256 MB
+- Cold start: ~1초 (메모리 부족 시 더 길어질 수 있음)
+- 최대 실행 시간: 30초
+- 사용 시나리오: 로컬 테스트 후 빠른 검증
+```
+
+### 스테이징 환경 (staging) - 성능 검증
+
+```
+- Lambda 메모리: 512 MB
+- Cold start: ~500ms
+- 최대 실행 시간: 60초
+- 사용 시나리오: 실제 환경과 유사한 성능 테스트
+- X-Ray 활성화: 성능 병목 지점 분석 가능
+```
+
+### 프로덕션 환경 (prod) - 고성능, 안정성
+
+```
+- Lambda 메모리: 1024 MB
+- Cold start: ~300ms
+- 최대 실행 시간: 120초
+- 사용 시나리오: 실제 사용자 트래픽 처리
+- X-Ray 활성화: 상세한 성능 추적 가능
+- 로그 보관: 30일 (운영 사후분석 가능)
+```
+
+**💡 팁:** 스테이징과 프로덕션에서 충분한 메모리를 할당하면:
+
+- Cold start 시간 단축 (AWS Lambda는 메모리에 따라 CPU도 비례 할당)
+- 더 빠른 코드 실행으로 전체 요청 응답시간 단축
+- S3 대용량 파일 다운로드/업로드 시 제한 시간 여유
 
 ---
 
@@ -965,12 +1177,56 @@ try {
 
 ---
 
+## ⚡ CloudFormation 고급: 조건부 리소스 (!If)
+
+**Stage에 따라 특정 리소스나 속성을 선택적으로 활성화합니다:**
+
+```yaml
+# 1️⃣ Conditions 섹션 - 조건 정의
+Conditions:
+  EnableXRay: !Equals
+    - !FindInMap [StageConfig, !Ref Stage, EnableXRay]
+    - "true"
+
+# 2️⃣ Lambda 함수에 적용 - X-Ray 활성화 여부 결정
+ListFunc:
+  Type: AWS::Serverless::Function
+  Properties:
+    Handler: handlers/hello.handler
+    # Condition을 만족할 때만 이 값 적용
+    Tracing: !If [EnableXRay, Active, PassThrough]
+    # Mappings에서 값 조회 (모든 stage에 적용)
+    Timeout: !FindInMap [StageConfig, !Ref Stage, Timeout]
+```
+
+**동작 방식:**
+
+| Stage   | Condition 결과 | Tracing 값  | 의미                         |
+| ------- | -------------- | ----------- | ---------------------------- |
+| dev     | false          | PassThrough | X-Ray 비활성화 (비용 절감)   |
+| staging | true           | Active      | X-Ray 활성화 (성능 추적)     |
+| prod    | true           | Active      | X-Ray 활성화 (운영 모니터링) |
+
+```javascript
+// 📌 핵심 학습:
+// !FindInMap: 테이블에서 값 조회 (모든 stage에 값 필요)
+// !If: 조건에 따라 다른 값 선택 (특정 stage만 다르게 처리)
+
+// 예:
+Timeout: !FindInMap [...] // ✅ 모든 stage에 다른 값
+Tracing: !If [EnableXRay, ...] // ✅ dev는 다르게, staging/prod는 같음
+```
+
+---
+
 ## 📚 참고자료
 
 - [AWS SDK S3 API 레퍼런스](https://docs.aws.amazon.com/AWSJavaScriptSDK/latest/)
 - [SAM S3 이벤트 설정](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-resource-function.html#sam-function-s3eventsource)
 - [Pre-signed URL 보안](https://docs.aws.amazon.com/AmazonS3/latest/userguide/PresignedUrlUploadObject.html)
 - [S3 버킷 정책 예제](https://docs.aws.amazon.com/AmazonS3/latest/userguide/example-bucket-policies.html)
+- [CloudFormation Conditions](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/conditions-section-structure.html)
+- [CloudFormation Intrinsic Functions](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/intrinsic-function-reference.html)
 
 ---
 

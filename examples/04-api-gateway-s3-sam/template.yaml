@@ -1,25 +1,90 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
-Description: SAM S3 API
+Description: SAM S3 API - Complete version with stage-based configuration
 
 Parameters:
   Stage:
     Type: String
     Default: dev
+    Description: Deployment stage (dev, staging, prod)
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+
+# Stage별 설정을 한 곳에서 관리 (Serverless의 custom.stages처럼)
+Mappings:
+  StageConfig:
+    dev:
+      MemorySize: 256
+      Timeout: 30
+      LogRetentionDays: 3
+      EnableXRay: "false"
+      LifecycleDays: 7
+      CorsOrigin: "http://localhost:3000"
+      LogLevel: INFO
+
+    staging:
+      MemorySize: 512
+      Timeout: 60
+      LogRetentionDays: 7
+      EnableXRay: "true"
+      LifecycleDays: 15
+      CorsOrigin: "https://staging.example.com"
+      LogLevel: INFO
+
+    prod:
+      MemorySize: 1024
+      Timeout: 120
+      LogRetentionDays: 30
+      EnableXRay: "true"
+      LifecycleDays: 90
+      CorsOrigin: "https://example.com"
+      LogLevel: WARN
+
+Globals:
+  Function:
+    Timeout: !FindInMap [StageConfig, !Ref Stage, Timeout]
+    MemorySize: !FindInMap [StageConfig, !Ref Stage, MemorySize]
+    Tracing: !If [EnableXRay, Active, PassThrough]
+    LoggingConfig:
+      LogFormat: JSON
+      ApplicationLogLevel: !FindInMap [StageConfig, !Ref Stage, LogLevel]
+
+Conditions:
+  # X-Ray 활성화 여부 (staging, prod만)
+  EnableXRay: !Or
+    - !Equals [!Ref Stage, staging]
+    - !Equals [!Ref Stage, prod]
 
 Resources:
+  # S3 버킷 (라이프사이클 정책 포함)
   S3Bucket:
     Type: AWS::S3::Bucket
     Properties:
       BucketName: !Sub "api-s3-${Stage}-${AWS::AccountId}"
       VersioningConfiguration:
         Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          # 이전 버전의 파일을 자동으로 삭제 (비용 절감)
+          - Id: DeleteOldVersions
+            NoncurrentVersionExpirationInDays:
+              !FindInMap [StageConfig, !Ref Stage, LifecycleDays]
+            Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
 
+  # Lambda 실행 Role (S3 접근 권한)
   LambdaRole:
     Type: AWS::IAM::Role
     Properties:
+      RoleName: !Sub "api-s3-role-${Stage}"
       AssumeRolePolicyDocument:
-        Version: '2012-10-17'
+        Version: "2012-10-17"
         Statement:
           - Effect: Allow
             Principal:
@@ -27,108 +92,185 @@ Resources:
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess # X-Ray 추적
       Policies:
-        - PolicyName: S3
+        - PolicyName: S3Access
           PolicyDocument:
-            Version: '2012-10-17'
+            Version: "2012-10-17"
             Statement:
               - Effect: Allow
                 Action:
-                  - s3:*
+                  - s3:ListBucket
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
                 Resource:
                   - !GetAtt S3Bucket.Arn
                   - !Sub "${S3Bucket.Arn}/*"
 
+  # API Gateway (CORS 설정 포함)
   Api:
     Type: AWS::Serverless::Api
     Properties:
       StageName: !Ref Stage
+      Name: !Sub "api-s3-${Stage}"
+      Description: "S3 Integration API"
+      Cors:
+        AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
+        AllowHeaders: "'Content-Type,Authorization,X-Amz-Date'"
+        AllowOrigin: "'*'"
 
+  # 함수 1: 파일 목록 조회
   ListFunc:
     Type: AWS::Serverless::Function
     Properties:
+      FunctionName: !Sub "api-s3-list-${Stage}"
       Handler: s3.listFiles
       Runtime: nodejs18.x
       CodeUri: handlers/
       Role: !GetAtt LambdaRole.Arn
+      Description: "List all files in S3 bucket"
+      MemorySize: 256
+      Timeout: 30
       Environment:
         Variables:
           BUCKET_NAME: !Ref S3Bucket
+          STAGE: !Ref Stage
       Events:
-        List:
+        ListEvent:
           Type: Api
           Properties:
             RestApiId: !Ref Api
             Path: /files
             Method: GET
 
+  # 함수 2: 파일 업로드 (Pre-signed URL 생성)
   UploadFunc:
     Type: AWS::Serverless::Function
     Properties:
+      FunctionName: !Sub "api-s3-upload-${Stage}"
       Handler: s3.uploadFile
       Runtime: nodejs18.x
       CodeUri: handlers/
       Role: !GetAtt LambdaRole.Arn
+      Description: "Generate pre-signed URL for uploading"
+      MemorySize: 256
+      Timeout: 30
       Environment:
         Variables:
           BUCKET_NAME: !Ref S3Bucket
+          STAGE: !Ref Stage
       Events:
-        Upload:
+        UploadEvent:
           Type: Api
           Properties:
             RestApiId: !Ref Api
             Path: /files/upload
             Method: POST
 
+  # 함수 3: 파일 다운로드 (Pre-signed URL 생성)
   GetFunc:
     Type: AWS::Serverless::Function
     Properties:
+      FunctionName: !Sub "api-s3-get-${Stage}"
       Handler: s3.getFile
       Runtime: nodejs18.x
       CodeUri: handlers/
       Role: !GetAtt LambdaRole.Arn
+      Description: "Generate pre-signed URL for downloading"
+      MemorySize: 256
+      Timeout: 30
       Environment:
         Variables:
           BUCKET_NAME: !Ref S3Bucket
+          STAGE: !Ref Stage
       Events:
-        Get:
+        GetEvent:
           Type: Api
           Properties:
             RestApiId: !Ref Api
             Path: /files/{key}
             Method: GET
 
+  # 함수 4: 파일 삭제
   DelFunc:
     Type: AWS::Serverless::Function
     Properties:
+      FunctionName: !Sub "api-s3-delete-${Stage}"
       Handler: s3.deleteFile
       Runtime: nodejs18.x
       CodeUri: handlers/
       Role: !GetAtt LambdaRole.Arn
+      Description: "Delete file from S3"
+      MemorySize: 256
+      Timeout: 30
       Environment:
         Variables:
           BUCKET_NAME: !Ref S3Bucket
+          STAGE: !Ref Stage
       Events:
-        Del:
+        DeleteEvent:
           Type: Api
           Properties:
             RestApiId: !Ref Api
             Path: /files/{key}
             Method: DELETE
 
+  # 함수 5: S3 파일 업로드 이벤트 처리 (별도 리소스로 설정 필요)
   ProcessFunc:
     Type: AWS::Serverless::Function
     Properties:
+      FunctionName: !Sub "api-s3-process-upload-${Stage}"
       Handler: s3.processUpload
       Runtime: nodejs18.x
       CodeUri: handlers/
       Role: !GetAtt LambdaRole.Arn
+      Description: "Process uploaded files from S3"
+      MemorySize: 256
+      Timeout: 60
       Environment:
         Variables:
           BUCKET_NAME: !Ref S3Bucket
+          STAGE: !Ref Stage
+
+  # 함수 6: S3 파일 삭제 이벤트 처리 (별도 리소스로 설정 필요)
+  DeleteProcessFunc:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "api-s3-process-delete-${Stage}"
+      Handler: s3.processDelete
+      Runtime: nodejs18.x
+      CodeUri: handlers/
+      Role: !GetAtt LambdaRole.Arn
+      Description: "Process deleted files from S3"
+      MemorySize: 256
+      Timeout: 30
+      Environment:
+        Variables:
+          BUCKET_NAME: !Ref S3Bucket
+          STAGE: !Ref Stage
 
 Outputs:
   ApiEndpoint:
+    Description: "API Gateway endpoint"
     Value: !Sub "https://${Api}.execute-api.${AWS::Region}.amazonaws.com/${Stage}"
+    Export:
+      Name: !Sub "${AWS::StackName}-ApiEndpoint"
+
   BucketName:
+    Description: "S3 Bucket name"
     Value: !Ref S3Bucket
+    Export:
+      Name: !Sub "${AWS::StackName}-BucketName"
+
+  BucketArn:
+    Description: "S3 Bucket ARN"
+    Value: !GetAtt S3Bucket.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-BucketArn"
+
+  LambdaRoleArn:
+    Description: "Lambda execution role ARN"
+    Value: !GetAtt LambdaRole.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-LambdaRoleArn"
