@@ -407,6 +407,654 @@ Outputs:
       Name: !Sub "UsersTable-${Stage}-Name"
 ```
 
+### Step 2.9: 실제 변환 사례 - 01→03 Hello World 마이그레이션
+
+이 섹션은 **examples/01-hello-world (Serverless)** → **examples/03-hello-world-sam (SAM)** 실제 변환 과정에서 발견한 핵심 이슈와 해결 방법입니다.
+
+#### 이슈 1️⃣: 핸들러 Export 이름 불일치
+
+**문제**: `template.yaml`의 Handler 정의와 실제 `handlers/hello.js`의 export 이름이 다르면 배포 후 에러 발생
+
+**Serverless (01-hello-world/serverless.yml)**:
+
+```yaml
+functions:
+  sayHello:
+    handler: handlers/hello.sayHello # sayHello 함수를 찾음
+  greet:
+    handler: handlers/hello.greet
+```
+
+**초기 handlers/hello.js** (❌ 잘못됨):
+
+```javascript
+exports.sayHello = async event => {
+  return { statusCode: 200, body: "Hello, World!" };
+};
+exports.greet = async event => {
+  return { statusCode: 200, body: `Hello, ${name}!` };
+};
+```
+
+**SAM (03-hello-world-sam/template.yaml)** (❌ 이름 변경):
+
+```yaml
+Resources:
+  SayHelloFunction:
+    Properties:
+      Handler: hello.helloHandler # ⚠️ 다른 이름!
+
+  GreetFunction:
+    Properties:
+      Handler: hello.greetHandler
+```
+
+**해결책**: handlers/hello.js에서 export 이름을 template.yaml에 맞게 변경
+
+```javascript
+// 01-hello-world와 동일한 로직, 이름만 변경
+exports.helloHandler = async event => {
+  return { statusCode: 200, body: "Hello, World!" };
+};
+exports.greetHandler = async event => {
+  const name = event.pathParameters?.name || "World";
+  return { statusCode: 200, body: `Hello, ${name}!` };
+};
+exports.createMessageHandler = async event => {
+  // POST /message 처리
+};
+// ... 나머지 8개 함수
+```
+
+**배운 점**: SAM은 핸들러 이름을 엄격하게 검증하므로, 함수 로직은 그대로 두고 export 이름만 수정하는 게 가장 깔끔합니다.
+
+---
+
+#### 이슈 2️⃣: API 경로 파라미터 형식 차이
+
+**문제**: Serverless Framework와 SAM의 경로 파라미터 처리 방식이 미묘하게 다름
+
+**Serverless (01-hello-world)**:
+
+```yaml
+functions:
+  divide:
+    handler: handlers/hello.divide
+    events:
+      - http:
+          path: divide/{a}/{b}
+          method: post # ⚠️ POST!
+          # body에 {dividend, divisor} 전달
+```
+
+**handlers/hello.js (01의 원본)**:
+
+```javascript
+exports.divide = async event => {
+  const { dividend, divisor } = JSON.parse(event.body);
+  return {
+    statusCode: 200,
+    body: JSON.stringify({ result: dividend / divisor })
+  };
+};
+```
+
+**테스트 호출**:
+
+```bash
+curl -X POST http://localhost:3000/divide/10/2 \
+  -H "Content-Type: application/json" \
+  -d '{"dividend": 100, "divisor": 4}'
+```
+
+**SAM (03-hello-world-sam)**로 변환 시:
+
+```yaml
+Resources:
+  DivideFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: hello.divideHandler
+      Events:
+        DivideEvent:
+          Type: Api
+          Properties:
+            Path: /divide/{a}/{b}
+            Method: GET # ❌ 경로 파라미터 사용 시 GET이 더 적절!
+```
+
+**개선된 handlers/hello.js**:
+
+```javascript
+exports.divideHandler = async event => {
+  // 경로 파라미터 추출 ({a}/{b})
+  const a = parseInt(event.pathParameters.a, 10);
+  const b = parseInt(event.pathParameters.b, 10);
+
+  if (b === 0) {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({ error: "Division by zero" })
+    };
+  }
+
+  return {
+    statusCode: 200,
+    body: JSON.stringify({ result: a / b })
+  };
+};
+```
+
+**테스트 호출**:
+
+```bash
+curl http://localhost:3000/divide/100/4  # GET으로 단순화!
+```
+
+**배운 점**:
+
+- 경로 파라미터는 POST보다 GET이 더 RESTful
+- `event.body` 파싱은 POST/PUT에만 필요
+- `event.pathParameters`는 경로 파라미터 `{a}/{b}`에서 자동 추출
+
+---
+
+#### 이슈 3️⃣: DynamoDB 테이블 리소스 명명 규칙
+
+**문제**: 01과 03이 동시에 배포되면 같은 이름의 DynamoDB 테이블로 충돌
+
+**Serverless (01)**:
+
+```yaml
+resources:
+  Resources:
+    ItemsTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: hello-world-items-${self:provider.stage}
+```
+
+**SAM (03) 초기** (❌ 충돌!):
+
+```yaml
+Resources:
+  ItemsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "hello-world-items-${Stage}"
+```
+
+**결과**: 같은 테이블 이름 → CloudFormation 에러
+
+**해결책**: 리소스 이름에 `sam-` prefix 추가
+
+```yaml
+Resources:
+  SamItemsTable: # 리소스명 변경
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "hello-world-items-sam-${Stage}" # 테이블명도 변경
+```
+
+**배운 점**:
+
+- 서로 다른 프레임워크의 동일 프로젝트는 리소스명을 명확히 구분
+- `sam-` prefix, `-sam-` suffix 등 일관된 명명 규칙 필요
+- CloudFormation 스택 이름도 `hello-world-sam-dev`처럼 구분
+
+---
+
+#### 이슈 4️⃣: IAM 권한 관리 명시성
+
+**Serverless (01-hello-world)**:
+
+```yaml
+provider:
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action: logs:*
+          Resource: "*"
+        - Effect: Allow
+          Action: dynamodb:*
+          Resource: !GetAtt ItemsTable.Arn
+```
+
+**SAM (03)**:
+
+```yaml
+Resources:
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "HelloWorldRole-${Stage}" # ⭐ 명시적 이름!
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: DynamoDBAccess
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:Query
+                  - dynamodb:Scan
+                Resource: !GetAtt SamItemsTable.Arn
+```
+
+**배운 점**:
+
+- SAM은 IAM Role을 **명시적으로** 정의해야 함 (Serverless는 자동 생성)
+- `RoleName`을 명시하면 리소스 충돌 예방 가능
+- 권한을 최소화 (principle of least privilege) - `dynamodb:*` 대신 필요한 권한만
+
+---
+
+#### 이슈 5️⃣: 환경변수 전달 메커니즘 (SAM Local vs AWS)
+
+**문제**: SAM Local과 AWS CloudFormation의 환경변수 처리 방식이 다름
+
+**template.yaml**:
+
+```yaml
+Globals:
+  Function:
+    Environment:
+      Variables:
+        STAGE: !Ref Stage
+        SERVICE_NAME: hello-world-lambda
+        ITEMS_TABLE: !Sub "hello-world-items-sam-${Stage}"
+```
+
+**SAM Local 시** (❌ 변수 치환 미지원):
+
+```bash
+sam local invoke CreateItemFunction --event -
+# 결과: ITEMS_TABLE = undefined ❌
+```
+
+**해결책**: `.env.json` 파일로 명시적 제공
+
+```json
+{
+  "CreateItemFunction": {
+    "STAGE": "dev",
+    "SERVICE_NAME": "hello-world-lambda",
+    "ITEMS_TABLE": "hello-world-items-sam-dev"
+  }
+}
+```
+
+**올바른 실행**:
+
+```bash
+sam local invoke CreateItemFunction --env-vars .env.json --event -
+# 결과: ITEMS_TABLE = hello-world-items-sam-dev ✅
+```
+
+**배운 점**:
+
+- SAM Local은 template.yaml의 `!Ref`, `!Sub` 문법을 **완벽히 해석하지 못함**
+- 로컬 테스트 시 `.env.json` 필수
+- AWS 배포 시는 CloudFormation이 처리하므로 문제 없음
+
+---
+
+### Step 2.10: 변환 체크리스트
+
+실제 변환 수행 시 다음 사항을 확인하세요:
+
+```
+[ ] 모든 핸들러 export 이름이 template.yaml Handler와 일치
+[ ] 경로 파라미터 ({id} 등) 처리 방식 검토 (GET vs POST)
+[ ] DynamoDB, S3 등 리소스명에 프로젝트별 prefix/suffix 추가
+[ ] IAM Role을 명시적으로 정의하고 권한 최소화
+[ ] .env.json 파일 생성 (SAM Local 테스트용)
+[ ] samconfig.toml 생성 (AWS 배포용)
+[ ] 로컬 테스트 완료 (sam local invoke, sam local start-api)
+[ ] AWS 배포 전 충돌 리소스 확인
+[ ] CloudFormation 스택 이름도 프로젝트별로 구분
+```
+
+---
+
+### Step 2.11: 실제 변환 사례 - 02→04 API Gateway + S3 마이그레이션
+
+이 섹션은 **examples/02-api-gateway-s3 (Serverless)** → **examples/04-api-gateway-s3-sam (SAM)** 실제 변환 과정입니다.
+
+#### 주요 차이점: S3 통합
+
+**02-api-gateway-s3 (Serverless)**:
+
+- 5개 S3 핸들러 (listFiles, uploadFile, getFile, deleteFile, processUpload)
+- Pre-signed URL 생성 (PUT/GET)
+- S3 이벤트 트리거 통합
+
+#### 이슈 1️⃣: S3 버킷 리소스 및 권한 정의
+
+**Serverless (02)**:
+
+```yaml
+provider:
+  iam:
+    role:
+      name: ApiS3Role-${self:provider.stage}
+      statements:
+        - Effect: Allow
+          Action: [s3:ListBucket, s3:GetObject, s3:PutObject, s3:DeleteObject]
+          Resource: "arn:aws:s3:::api-s3-bucket-${self:service}-${self:provider.stage}/*"
+
+resources:
+  Resources:
+    FileUploadBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: api-s3-bucket-${self:service}-${self:provider.stage}
+```
+
+**SAM (04)**:
+
+```yaml
+Parameters:
+  AwsAccountId:
+    Type: String
+    Description: AWS Account ID for bucket ARN
+
+Resources:
+  # ⭐ 명시적 S3 버킷 정의
+  FileUploadBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "api-s3-bucket-${Stage}-${AwsAccountId}"
+      VersioningConfiguration:
+        Status: Enabled
+
+  # ⭐ 명시적 IAM Role 정의
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "ApiS3Role-${Stage}"
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: S3Access
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:ListBucket
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                Resource:
+                  - !GetAtt FileUploadBucket.Arn
+                  - !Sub "${FileUploadBucket.Arn}/*"
+```
+
+**배운 점**:
+
+- SAM도 S3 버킷을 Resources에 명시적으로 정의
+- IAM Role이 명시적이어야 하고, 리소스 ARN을 `!GetAtt` 또는 `!Sub`로 동적 참조
+- 버킷 이름에 Account ID 포함 시 `Parameters`로 입력받기
+
+---
+
+#### 이슈 2️⃣: Pre-signed URL 생성 로직 (SDK 차이 없음)
+
+**Serverless (02) & SAM (04) 모두 동일**:
+
+handlers/s3.js:
+
+```javascript
+const {
+  S3Client,
+  PutObjectCommand,
+  GetObjectCommand
+} = require("@aws-sdk/client-s3");
+const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
+
+const s3Client = new S3Client({ region: "us-west-2" }); // ⭐ Hardcoded!
+
+exports.uploadFileHandler = async event => {
+  const bucketName = process.env.BUCKET_NAME;
+  const fileName = event.pathParameters.fileName || "default.txt";
+
+  // PutObject Pre-signed URL 생성 (업로드용)
+  const putCommand = new PutObjectCommand({
+    Bucket: bucketName,
+    Key: fileName
+  });
+
+  const presignedUrl = await getSignedUrl(s3Client, putCommand, {
+    expiresIn: parseInt(process.env.SIGNED_URL_EXPIRY || "3600", 10)
+  });
+
+  return {
+    statusCode: 200,
+    body: JSON.stringify({
+      uploadUrl: presignedUrl,
+      expiresIn: 3600
+    })
+  };
+};
+
+exports.getFileHandler = async event => {
+  const bucketName = process.env.BUCKET_NAME;
+  const fileName = event.pathParameters.fileName;
+
+  // GetObject Pre-signed URL 생성 (다운로드용)
+  const getCommand = new GetObjectCommand({
+    Bucket: bucketName,
+    Key: fileName
+  });
+
+  const presignedUrl = await getSignedUrl(s3Client, getCommand, {
+    expiresIn: 3600
+  });
+
+  return {
+    statusCode: 200,
+    body: JSON.stringify({
+      downloadUrl: presignedUrl,
+      expiresIn: 3600
+    })
+  };
+};
+```
+
+**배운 점**:
+
+- Pre-signed URL 생성은 Serverless/SAM 구분 없이 동일
+- S3 SDK 사용 시 **리전을 hardcoding** 필요 (SAM Local 호환성)
+
+---
+
+#### 이슈 3️⃣: S3 이벤트 트리거 마이그레이션
+
+**Serverless (02)**:
+
+```yaml
+functions:
+  processUpload:
+    handler: handlers/s3.processUploadHandler
+    events:
+      - s3:
+          bucket: FileUploadBucket
+          event: s3:ObjectCreated:*
+          rules:
+            - prefix: uploads/
+            - suffix: .jpg
+```
+
+**SAM (04)**:
+
+```yaml
+Resources:
+  ProcessUploadFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: handlers/
+      Handler: s3.processUploadHandler
+      Events:
+        S3UploadEvent:
+          Type: S3
+          Properties:
+            Bucket: !Ref FileUploadBucket
+            Events: s3:ObjectCreated:*
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: prefix
+                    Value: uploads/
+                  - Name: suffix
+                    Value: .jpg
+```
+
+**배운 점**:
+
+- S3 이벤트는 `Type: S3`로 명시
+- `bucket:` → `Bucket: !Ref` (리소스 참조)
+- `rules` → `Filter.S3Key.Rules` (복잡한 구조)
+
+---
+
+#### 이슈 4️⃣: 환경변수와 .env.json
+
+**template.yaml**:
+
+```yaml
+Globals:
+  Function:
+    Environment:
+      Variables:
+        BUCKET_NAME: !Ref FileUploadBucket
+        BUCKET_REGION: !Sub "${AWS::Region}"
+        STAGE: !Ref Stage
+        SIGNED_URL_EXPIRY: "3600"
+```
+
+**SAM Local 테스트용 .env.json**:
+
+```json
+{
+  "ListFunc": {
+    "BUCKET_NAME": "api-s3-dev-840297437975",
+    "BUCKET_REGION": "us-west-2",
+    "STAGE": "dev",
+    "SIGNED_URL_EXPIRY": "3600"
+  },
+  "UploadFunc": {
+    "BUCKET_NAME": "api-s3-dev-840297437975",
+    "BUCKET_REGION": "us-west-2",
+    "STAGE": "dev",
+    "SIGNED_URL_EXPIRY": "3600"
+  },
+  "GetFunc": {
+    "BUCKET_NAME": "api-s3-dev-840297437975",
+    "BUCKET_REGION": "us-west-2",
+    "STAGE": "dev"
+  },
+  "DeleteFunc": {
+    "BUCKET_NAME": "api-s3-dev-840297437975",
+    "BUCKET_REGION": "us-west-2",
+    "STAGE": "dev"
+  },
+  "ProcessFunc": {
+    "BUCKET_NAME": "api-s3-dev-840297437975",
+    "BUCKET_REGION": "us-west-2",
+    "STAGE": "dev"
+  }
+}
+```
+
+**배운 점**:
+
+- 각 함수가 필요한 환경변수를 명시적으로 정의
+- BUCKET_NAME은 실제 S3 버킷 이름으로 (AWS 배포 후)
+
+---
+
+#### 이슈 5️⃣: 리전 Hardcoding (S3에도 적용)
+
+**handlers/s3.js**:
+
+```javascript
+// ❌ 작동하지 않음 (SAM Local)
+const s3Client = new S3Client({
+  region: process.env.BUCKET_REGION || "us-west-2"
+});
+
+// ✅ 작동함 (SAM Local + AWS)
+const s3Client = new S3Client({
+  region: "us-west-2" // Hardcoded!
+});
+```
+
+**배운 점**:
+
+- DynamoDB와 마찬가지로 S3도 리전을 hardcoding
+- SAM Local 컨테이너 환경변수 상속 문제
+
+---
+
+#### 이슈 6️⃣: Pre-signed URL의 버킷 이름 차이
+
+**Serverless (02) 배포 후**:
+
+- 버킷 이름: `api-s3-bucket-api-s3-integration-dev`
+
+**SAM (04) 배포 후**:
+
+- 버킷 이름: `api-s3-bucket-dev-840297437975`
+
+**테스트 시 주의**:
+
+```bash
+# 02 테스트
+curl http://localhost:3000/files
+# BUCKET_NAME = api-s3-bucket-api-s3-integration-dev
+
+# 04 테스트
+curl http://localhost:3000/files
+# BUCKET_NAME = api-s3-bucket-dev-840297437975
+```
+
+**배운 점**:
+
+- 로컬 테스트 시 `.env.json`의 BUCKET_NAME을 실제 배포된 버킷명으로 설정
+- `handlers/s3.js`는 두 프로젝트 거의 동일하지만, 환경변수만 다름
+
+---
+
+### Step 2.12: 02→04 변환 체크리스트
+
+```
+[ ] S3 버킷을 Resources에 명시적으로 정의
+[ ] IAM Role을 명시적으로 정의 (S3 권한 포함)
+[ ] Pre-signed URL 생성 로직 (SDK 차이 없음)
+[ ] S3 이벤트 트리거: Type: S3, Events, Filter 구조 확인
+[ ] .env.json에 BUCKET_NAME, BUCKET_REGION, SIGNED_URL_EXPIRY 설정
+[ ] 핸들러에서 리전 hardcoding (handlers/s3.js)
+[ ] 테스트 시 실제 S3 버킷명으로 .env.json 업데이트
+[ ] samconfig.toml에 Account ID 파라미터 추가 (선택사항)
+```
+
 ---
 
 ## Phase 3: 로컬 테스트
