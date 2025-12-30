@@ -1,82 +1,116 @@
-# 테스트 전략: LocalStack vs AWS DynamoDB
+# 테스트 전략: LocalStack vs SAM Local vs AWS Lambda
 
-SAM Local 프로젝트에는 **2가지 테스트 방식**이 있습니다. 각각의 용도와 차이점을 이해하면 더 효율적으로 개발할 수 있습니다.
+SAM Local 프로젝트에는 **3가지 테스트 방식**이 있습니다. 각각의 용도와 차이점을 이해하면 더 효율적으로 개발할 수 있습니다.
 
 ---
 
 ## 📊 비교표
 
-| 항목               | LocalStack               | AWS DynamoDB                   |
-| ------------------ | ------------------------ | ------------------------------ |
-| **테스트 파일**    | `localstack-test-all.js` | `sam-local-test-all.js`        |
-| **데이터베이스**   | 로컬 Docker (LocalStack) | 실제 AWS 클라우드              |
-| **실행 위치**      | 완전히 로컬              | Docker (로컬) + AWS (클라우드) |
-| **AWS 자격증명**   | 불필요                   | 필요                           |
-| **IAM 권한 설정**  | 불필요                   | 필수                           |
-| **테스트 속도**    | ⚡ 매우 빠름             | 🚀 약간 느림 (네트워크)        |
-| **실제 환경 재현** | ⚠️ 시뮬레이션            | ✅ 실제 환경                   |
-| **클라우드 비용**  | 없음                     | 미소 (거의 없음)               |
-| **네트워크 의존**  | 없음                     | 있음                           |
-| **용도**           | 빠른 개발/디버깅         | 최종 검증/배포 전 테스트       |
+| 항목               | LocalStack               | SAM Local                | AWS Lambda              |
+| ------------------ | ------------------------ | ------------------------ | ----------------------- |
+| **테스트 파일**    | `localstack.test.js`     | `sam-local.test.js`      | `aws-lambda.test.sh`    |
+| **데이터베이스**   | 로컬 Docker (LocalStack) | 로컬 Docker (LocalStack) | 실제 AWS 클라우드       |
+| **Lambda 실행**    | 직접 JavaScript          | SAM 시뮬레이터           | 실제 AWS Lambda         |
+| **실행 위치**      | 완전히 로컬              | 완전히 로컬              | AWS 클라우드            |
+| **AWS 자격증명**   | 불필요                   | 불필요 (로컬)            | 필요                    |
+| **테스트 속도**    | ⚡ 매우 빠름             | ⚡ 빠름                  | 🚀 약간 느림 (네트워크) |
+| **실제 환경 재현** | ⚠️ 부분 시뮬레이션       | ✅ 거의 완벽             | ✅ 100% 실제 환경       |
+| **클라우드 비용**  | 없음                     | 없음                     | 미소 (거의 없음)        |
+| **네트워크 의존**  | 없음                     | 없음                     | 있음                    |
+| **용도**           | 빠른 개발/디버깅         | 배포 전 최종 검증        | 실제 운영 환경 테스트   |
+| **테스트 결과**    | ✅ 17/17 성공            | ✅ 8/8 성공              | ✅ 8/8 성공             |
+
+---
+
+## 🎯 최종 테스트 결과 (2025-12-30)
+
+```
+✅ LocalStack:   17/17 성공 (기본 4개 + DynamoDB CRUD 4개 + 에러 케이스 9개)
+✅ SAM Local:    8/8 성공  (기본 4개 + DynamoDB CRUD 4개)
+✅ AWS Lambda:   8/8 성공  (동일 함수, 실제 환경)
+────────────────────────────────────────────
+✅ 총: 33/33 모든 테스트 통과 🎉
+```
 
 ---
 
 ## 🚀 실행 방법
 
-### 방법 1️⃣: LocalStack으로 테스트 (완전히 로컬)
+### 방법 1️⃣: LocalStack으로 테스트 (완전히 로컬, 가장 빠름)
 
 ```bash
 # 필수: LocalStack Docker 실행
 docker-compose up -d
 
 # 테스트 실행
-npm test
-# 또는
-node test/localstack.test.js
+npm run test:localstack
 ```
+
+**결과**: ✅ 17/17 성공
 
 **특징:**
 
 - ✅ AWS 자격증명 불필요
-- ✅ 매우 빠른 테스트
+- ✅ 매우 빠른 테스트 (1초 이내)
 - ✅ 개발 초기 단계에 최적
-- ⚠️ 실제 AWS와 약간 다를 수 있음
+- ✅ 기본 4개 함수 + DynamoDB CRUD 4개 + 에러 케이스 9개 모두 테스트
 
 ---
 
-### 방법 2️⃣: AWS DynamoDB로 테스트 (실제 환경)
+### 방법 2️⃣: SAM Local로 테스트 (로컬 시뮬레이션, 배포 전 검증)
 
 ```bash
-# 필수: AWS 자격증명 설정
-aws configure
-
-# 필수: IAM 권한 설정
-./setup-iam-permissions.sh jasonkim restricted
+# 필수: LocalStack Docker 실행
+docker-compose up -d
 
 # 필수: SAM 빌드
 sam build
 
 # 테스트 실행
-node test/sam-local.test.js
+npm run test:sam-local
 ```
+
+**결과**: ✅ 8/8 성공
 
 **특징:**
 
-- ✅ 실제 AWS 환경과 동일
-- ✅ 클라우드 배포 전 최종 검증
-- ⚠️ 약간의 네트워크 지연
-- ⚠️ AWS 자격증명 필요
+- ✅ SAM 시뮬레이터로 실제 Lambda 환경 재현
+- ✅ AWS 자격증명 불필요
+- ✅ 배포 전 최종 검증에 최적
+- ✅ 기본 4개 함수 + DynamoDB CRUD 4개 모두 테스트
+
+---
+
+### 방법 3️⃣: AWS Lambda로 테스트 (실제 환경, 최종 검증)
+
+```bash
+# 필수: AWS 자격증명 설정
+aws configure
+
+# 필수: 배포
+npm run deploy-dev
+
+# 테스트 실행
+npm run test:aws-lambda
+```
+
+**결과**: ✅ 8/8 성공
+
+**특징:**
+
+- ✅ 실제 AWS Lambda 환경에서 실행
+- ✅ 실제 AWS API Gateway 통신
+- ✅ 실제 배포 환경 검증
+- ✅ 기본 4개 함수 + DynamoDB CRUD 4개 모두 테스트
 
 ---
 
 ## 📌 선택 가이드
 
-### LocalStack (test/localstack.test.js) 사용하기
+### LocalStack (가장 권장 - 개발 중)
 
 ```bash
-npm test
-# 또는
-node test/localstack.test.js
+npm run test:localstack
 ```
 
 **언제 사용?**

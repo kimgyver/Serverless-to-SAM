@@ -46,7 +46,7 @@ const createResponse = (statusCode, body, headers = {}) => ({
 // Handler: SayHello
 // ============================================
 
-exports.sayHello = async (event, context) => {
+exports.helloHandler = async (event, context) => {
   const logger = createLogger("SayHello");
 
   try {
@@ -78,7 +78,7 @@ exports.sayHello = async (event, context) => {
 // Handler: Greet
 // ============================================
 
-exports.greet = async (event, context) => {
+exports.greetHandler = async (event, context) => {
   const logger = createLogger("Greet");
 
   try {
@@ -120,7 +120,7 @@ exports.greet = async (event, context) => {
 // Handler: CreateMessage
 // ============================================
 
-exports.createMessage = async (event, context) => {
+exports.createMessageHandler = async (event, context) => {
   const logger = createLogger("CreateMessage");
 
   try {
@@ -180,46 +180,36 @@ exports.createMessage = async (event, context) => {
 // Handler: Divide
 // ============================================
 
-exports.divide = async (event, context) => {
+exports.divideHandler = async (event, context) => {
   const logger = createLogger("Divide");
 
   try {
-    let body = {};
-
-    if (event.body) {
-      try {
-        body = JSON.parse(event.body);
-      } catch (parseError) {
-        logger.error("Invalid JSON body", parseError);
-        return createResponse(400, {
-          error: "Bad Request",
-          message: "Request body must be valid JSON"
-        });
-      }
-    }
-
     logger.log("Received request", {
       path: event.path,
       method: event.httpMethod,
-      bodyKeys: Object.keys(body)
+      pathParameters: event.pathParameters
     });
 
-    const { dividend, divisor } = body;
+    // Get dividend and divisor from path parameters
+    const { a, b } = event.pathParameters || {};
+    const dividend = a ? Number(a) : undefined;
+    const divisor = b ? Number(b) : undefined;
 
     // Validation
-    if (dividend === undefined || dividend === null) {
-      logger.error("Missing dividend parameter");
+    if (dividend === undefined || isNaN(dividend)) {
+      logger.error("Missing or invalid dividend parameter");
       return createResponse(400, {
         error: "Bad Request",
-        message: "dividend is required"
+        message:
+          "dividend (path parameter 'a') is required and must be a number"
       });
     }
 
-    if (divisor === undefined || divisor === null) {
-      logger.error("Missing divisor parameter");
+    if (divisor === undefined || isNaN(divisor)) {
+      logger.error("Missing or invalid divisor parameter");
       return createResponse(400, {
         error: "Bad Request",
-        message: "divisor is required"
+        message: "divisor (path parameter 'b') is required and must be a number"
       });
     }
 
@@ -276,7 +266,7 @@ const dynamodb = new AWS.DynamoDB.DocumentClient(dynamodbConfig);
 const tableName = process.env.ITEMS_TABLE || "sam-hello-world-items";
 
 // Handler: ListItems
-exports.listItems = async (event, context) => {
+exports.listItemsHandler = async (event, context) => {
   const logger = createLogger("ListItems");
 
   try {
@@ -307,7 +297,7 @@ exports.listItems = async (event, context) => {
 };
 
 // Handler: CreateItem
-exports.createItem = async (event, context) => {
+exports.createItemHandler = async (event, context) => {
   const logger = createLogger("CreateItem");
 
   try {
@@ -371,7 +361,7 @@ exports.createItem = async (event, context) => {
 };
 
 // Handler: UpdateItem
-exports.updateItem = async (event, context) => {
+exports.updateItemHandler = async (event, context) => {
   const logger = createLogger("UpdateItem");
 
   try {
@@ -466,7 +456,7 @@ exports.updateItem = async (event, context) => {
 };
 
 // Handler: DeleteItem
-exports.deleteItem = async (event, context) => {
+exports.deleteItemHandler = async (event, context) => {
   const logger = createLogger("DeleteItem");
 
   try {

@@ -76,15 +76,14 @@ echo "테스트 실행 중...\n"
 
 echo "📌 그룹 1: 기본 함수 테스트\n"
 
-test_endpoint "SayHello" "GET" "/say-hello"
+test_endpoint "SayHello" "GET" "/hello"
 
-test_endpoint "Greet (Alice)" "GET" "/greet/Alice"
+test_endpoint "Greet (Alice)" "GET" "/hello/Alice"
 
 test_endpoint "CreateMessage" "POST" "/message" \
   '{"title":"Test Title","content":"Test Content"}'
 
-test_endpoint "Divide" "POST" "/divide" \
-  '{"dividend":10,"divisor":2}'
+test_endpoint "Divide" "GET" "/divide/10/2"
 
 echo ""
 echo "📌 그룹 2: DynamoDB 함수 테스트\n"

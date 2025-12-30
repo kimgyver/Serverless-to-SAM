@@ -1,12 +1,12 @@
 const {
-  sayHello,
-  greet,
-  createMessage,
-  divide,
-  listItems,
-  createItem,
-  updateItem,
-  deleteItem
+  helloHandler,
+  greetHandler,
+  createMessageHandler,
+  divideHandler,
+  listItemsHandler,
+  createItemHandler,
+  updateItemHandler,
+  deleteItemHandler
 } = require("../handlers/hello");
 
 // Complete test suite for all Lambda functions
@@ -37,7 +37,7 @@ const runTests = async () => {
       requestContext: { http: { method: "GET", path: "/say-hello" } },
       headers: {}
     };
-    const result = await sayHello(event);
+    const result = await helloHandler(event);
     const body = JSON.parse(result.body);
     if (!body.greeting || body.greeting !== "Hello, World!") {
       throw new Error("Invalid greeting");
@@ -50,7 +50,7 @@ const runTests = async () => {
       pathParameters: { name: "Alice" },
       headers: {}
     };
-    const result = await greet(event);
+    const result = await greetHandler(event);
     const body = JSON.parse(result.body);
     if (!body.greeting || !body.greeting.includes("Alice")) {
       throw new Error("Invalid greeting");
@@ -63,7 +63,7 @@ const runTests = async () => {
       pathParameters: { name: "" },
       headers: {}
     };
-    const result = await greet(event);
+    const result = await greetHandler(event);
     if (result.statusCode === 400) {
       return; // Expected error
     }
@@ -76,7 +76,7 @@ const runTests = async () => {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ title: "Test Title", content: "Test Content" })
     };
-    const result = await createMessage(event);
+    const result = await createMessageHandler(event);
     const body = JSON.parse(result.body);
     if (!body.id || !body.title || !body.content) {
       throw new Error("Missing id, title, or content");
@@ -89,7 +89,7 @@ const runTests = async () => {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({})
     };
-    const result = await createMessage(event);
+    const result = await createMessageHandler(event);
     if (result.statusCode === 400) {
       return; // Expected error
     }
@@ -98,28 +98,25 @@ const runTests = async () => {
 
   await testFn("Divide - 정상 케이스", async () => {
     const event = {
-      requestContext: { http: { method: "POST", path: "/divide" } },
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ dividend: 10, divisor: 2 })
+      requestContext: { http: { method: "GET", path: "/divide/100/4" } },
+      pathParameters: { a: "100", b: "4" },
+      headers: {}
     };
-    const result = await divide(event);
+    const result = await divideHandler(event);
     const body = JSON.parse(result.body);
-    if (body.result !== 5) {
-      throw new Error(`Expected 5, got ${body.result}`);
+    if (body.result !== 25) {
+      throw new Error(`Expected 25, got ${body.result}`);
     }
   });
 
   await testFn("Divide - 0으로 나누기 에러", async () => {
     const event = {
-      requestContext: { http: { method: "POST", path: "/divide" } },
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ dividend: 10, divisor: 0 })
+      requestContext: { http: { method: "GET", path: "/divide/10/0" } },
+      pathParameters: { a: "10", b: "0" },
+      headers: {}
     };
-    const result = await divide(event);
-    if (
-      result.statusCode === 400 &&
-      result.body.includes("divisor cannot be zero")
-    ) {
+    const result = await divideHandler(event);
+    if (result.statusCode === 400 && result.body.includes("zero")) {
       return; // Expected error
     }
     throw new Error("Expected divide by zero error");
@@ -127,11 +124,11 @@ const runTests = async () => {
 
   await testFn("Divide - 빈 파라미터", async () => {
     const event = {
-      requestContext: { http: { method: "POST", path: "/divide" } },
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({})
+      requestContext: { http: { method: "GET", path: "/divide/" } },
+      pathParameters: { a: "", b: "" },
+      headers: {}
     };
-    const result = await divide(event);
+    const result = await divideHandler(event);
     if (result.statusCode === 400 || result.statusCode === 500) {
       return; // Expected error
     }
@@ -159,7 +156,7 @@ const runTests = async () => {
         description: "이것은 테스트입니다"
       })
     };
-    const result = await createItem(event);
+    const result = await createItemHandler(event);
     const body = JSON.parse(result.body);
     if (!body.id || !body.title) {
       throw new Error("Missing id or title");
@@ -172,7 +169,7 @@ const runTests = async () => {
       requestContext: { http: { method: "GET", path: "/items" } },
       headers: {}
     };
-    const result = await listItems(event);
+    const result = await listItemsHandler(event);
     const body = JSON.parse(result.body);
     if (!Array.isArray(body.items) || typeof body.count !== "number") {
       throw new Error("Invalid items response structure");
@@ -190,7 +187,7 @@ const runTests = async () => {
         description: "업데이트된 설명"
       })
     };
-    const result = await updateItem(event);
+    const result = await updateItemHandler(event);
     const body = JSON.parse(result.body);
     if (body.title !== "업데이트된 제목") {
       throw new Error("Title not updated");
@@ -202,7 +199,7 @@ const runTests = async () => {
       requestContext: { http: { method: "GET", path: "/items" } },
       headers: {}
     };
-    const result = await listItems(event);
+    const result = await listItemsHandler(event);
     const body = JSON.parse(result.body);
     const updatedItem = body.items.find(item => item.id === itemId);
     if (!updatedItem || updatedItem.title !== "업데이트된 제목") {
@@ -217,7 +214,7 @@ const runTests = async () => {
       pathParameters: { id: itemId },
       headers: {}
     };
-    const result = await deleteItem(event);
+    const result = await deleteItemHandler(event);
     if (result.statusCode !== 200) {
       throw new Error(`Expected 200, got ${result.statusCode}`);
     }
@@ -228,7 +225,7 @@ const runTests = async () => {
       requestContext: { http: { method: "GET", path: "/items" } },
       headers: {}
     };
-    const result = await listItems(event);
+    const result = await listItemsHandler(event);
     const body = JSON.parse(result.body);
     const deletedItem = body.items.find(item => item.id === itemId);
     if (deletedItem) {
@@ -249,7 +246,7 @@ const runTests = async () => {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ description: "No title" })
     };
-    const result = await createItem(event);
+    const result = await createItemHandler(event);
     if (result.statusCode === 400) {
       return; // Expected error
     }
@@ -263,7 +260,7 @@ const runTests = async () => {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ title: "Test", description: "Test" })
     };
-    const result = await updateItem(event);
+    const result = await updateItemHandler(event);
     // 성공 반환 (기존 구현이 에러를 throw하지 않음)
     if (result.statusCode >= 200 && result.statusCode < 300) {
       return;
@@ -276,7 +273,7 @@ const runTests = async () => {
       pathParameters: { id: "" },
       headers: {}
     };
-    const result = await deleteItem(event);
+    const result = await deleteItemHandler(event);
     if (result.statusCode === 400) {
       return; // Expected error
     }

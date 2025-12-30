@@ -2,32 +2,32 @@ version = 0.1
 
 [default.deploy.parameters]
 stack_name = "hello-world-sam-dev"
-region = "us-west-2"
-capabilities = "CAPABILITY_IAM"
+region = "us-east-1"
+capabilities = "CAPABILITY_NAMED_IAM"
 confirm_changeset = false
 parameter_overrides = "Stage=dev Environment=development"
 resolve_s3 = true
 
 [dev.deploy.parameters]
 stack_name = "hello-world-sam-dev"
-region = "us-west-2"
-capabilities = "CAPABILITY_IAM"
+region = "us-east-1"
+capabilities = "CAPABILITY_NAMED_IAM"
 confirm_changeset = false
 parameter_overrides = "Stage=dev Environment=development"
 resolve_s3 = true
 
 [staging.deploy.parameters]
 stack_name = "hello-world-sam-staging"
-region = "us-west-2"
-capabilities = "CAPABILITY_IAM"
+region = "us-east-1"
+capabilities = "CAPABILITY_NAMED_IAM"
 confirm_changeset = false
 parameter_overrides = "Stage=staging Environment=staging"
 resolve_s3 = true
 
 [prod.deploy.parameters]
 stack_name = "hello-world-sam-prod"
-region = "us-west-2"
-capabilities = "CAPABILITY_IAM"
+region = "us-east-1"
+capabilities = "CAPABILITY_NAMED_IAM"
 confirm_changeset = false
 parameter_overrides = "Stage=prod Environment=production"
 resolve_s3 = true

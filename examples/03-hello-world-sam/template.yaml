@@ -1,29 +1,20 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
-Description: "SAM Example 1: Hello World - HTTP API Gateway + Lambda Functions"
+Description: "SAM Conversion: Serverless Framework hello-world-lambda to AWS SAM"
 
 Parameters:
   Stage:
     Type: String
     Default: dev
-    Description: Deployment stage (dev, staging, prod)
+    Description: Deployment stage
     AllowedValues:
       - dev
       - staging
       - prod
 
-  Environment:
-    Type: String
-    Default: development
-    Description: Environment name
-    AllowedValues:
-      - development
-      - staging
-      - production
-
 Globals:
   Function:
-    # 모든 함수에 공통으로 적용되는 설정
+    # 모든 함수에 공통으로 적용되는 설정 (01-hello-world/serverless.yml 참조)
     Timeout: 30
     MemorySize: 128
     Runtime: nodejs18.x
@@ -32,17 +23,19 @@ Globals:
     Environment:
       Variables:
         STAGE: !Ref Stage
-        ENVIRONMENT: !Ref Environment
-        SERVICE_NAME: HelloWorldService
         LOG_LEVEL: INFO
+        SERVICE_NAME: hello-world-lambda
+        ITEMS_TABLE: !Sub "hello-world-items-sam-${Stage}"
 
 Resources:
   # ============================================
   # IAM Role for Lambda Functions
+  # 출처: 01-hello-world/serverless.yml provider.iam.role
   # ============================================
   LambdaExecutionRole:
     Type: AWS::IAM::Role
     Properties:
+      RoleName: !Sub "HelloWorldRole-sam-${Stage}"
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -105,60 +98,59 @@ Resources:
   # ============================================
 
   # Function 1: SayHello - No parameters
+  # 출처: 01-hello-world/serverless.yml functions.sayHello
   SayHelloFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub hello-world-say-hello-${Stage}
+      FunctionName: !Sub hello-world-sam-say-hello-${Stage}
       CodeUri: ./handlers
-      Handler: hello.sayHello
+      Handler: hello.helloHandler
       Role: !GetAtt LambdaExecutionRole.Arn
-      Environment:
-        Variables:
-          FUNCTION_NAME: SayHello
+      Description: Simplest Lambda - returns Hello
       Events:
         HttpEvent:
           Type: Api
           Properties:
             RestApiId: !Ref HelloWorldApi
-            Path: /say-hello
+            Path: /hello
             Method: GET
       Tags:
-        Stage: !Ref Stage
-        Service: HelloWorldService
+        Environment: !Ref Stage
+        Service: HelloWorld
+        Owner: Jason
 
   # Function 2: Greet - Path parameter
+  # 출처: 01-hello-world/serverless.yml functions.greet
   GreetFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub hello-world-greet-${Stage}
+      FunctionName: !Sub hello-world-sam-greet-${Stage}
       CodeUri: ./handlers
-      Handler: hello.greet
+      Handler: hello.greetHandler
       Role: !GetAtt LambdaExecutionRole.Arn
-      Environment:
-        Variables:
-          FUNCTION_NAME: Greet
+      Description: Returns greeting with name parameter
       Events:
         HttpEvent:
           Type: Api
           Properties:
             RestApiId: !Ref HelloWorldApi
-            Path: /greet/{name}
+            Path: /hello/{name}
             Method: GET
       Tags:
-        Stage: !Ref Stage
-        Service: HelloWorldService
+        Environment: !Ref Stage
+        Service: HelloWorld
+        Owner: Jason
 
   # Function 3: CreateMessage - POST with body
+  # 출처: 01-hello-world/serverless.yml functions.createMessage
   CreateMessageFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub hello-world-create-message-${Stage}
+      FunctionName: !Sub hello-world-sam-create-message-${Stage}
       CodeUri: ./handlers
-      Handler: hello.createMessage
+      Handler: hello.createMessageHandler
       Role: !GetAtt LambdaExecutionRole.Arn
-      Environment:
-        Variables:
-          FUNCTION_NAME: CreateMessage
+      Description: Creates a message from POST body
       Events:
         HttpEvent:
           Type: Api
@@ -167,43 +159,42 @@ Resources:
             Path: /message
             Method: POST
       Tags:
-        Stage: !Ref Stage
-        Service: HelloWorldService
+        Environment: !Ref Stage
+        Service: HelloWorld
+        Owner: Jason
 
   # Function 4: Divide - Error handling
+  # 출처: 01-hello-world/serverless.yml functions.divide
   DivideFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub hello-world-divide-${Stage}
+      FunctionName: !Sub hello-world-sam-divide-${Stage}
       CodeUri: ./handlers
-      Handler: hello.divide
+      Handler: hello.divideHandler
       Role: !GetAtt LambdaExecutionRole.Arn
-      Environment:
-        Variables:
-          FUNCTION_NAME: Divide
+      Description: Divides two numbers (error handling demo)
       Events:
         HttpEvent:
           Type: Api
           Properties:
             RestApiId: !Ref HelloWorldApi
-            Path: /divide
-            Method: POST
+            Path: /divide/{a}/{b}
+            Method: GET
       Tags:
-        Stage: !Ref Stage
-        Service: HelloWorldService
+        Environment: !Ref Stage
+        Service: HelloWorld
+        Owner: Jason
 
   # Function 5: ListItems - DynamoDB Scan
+  # 출처: 01-hello-world/serverless.yml functions.listItems
   ListItemsFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub hello-world-list-items-${Stage}
+      FunctionName: !Sub hello-world-sam-list-items-${Stage}
       CodeUri: ./handlers
-      Handler: hello.listItems
+      Handler: hello.listItemsHandler
       Role: !GetAtt LambdaExecutionRole.Arn
-      Environment:
-        Variables:
-          FUNCTION_NAME: ListItems
-          ITEMS_TABLE: !Ref ItemsTable
+      Description: Lists all items from DynamoDB
       Events:
         HttpEvent:
           Type: Api
@@ -212,21 +203,20 @@ Resources:
             Path: /items
             Method: GET
       Tags:
-        Stage: !Ref Stage
-        Service: HelloWorldService
+        Environment: !Ref Stage
+        Service: HelloWorld
+        Owner: Jason
 
   # Function 6: CreateItem - DynamoDB Put
+  # 출처: 01-hello-world/serverless.yml functions.createItem
   CreateItemFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub hello-world-create-item-${Stage}
+      FunctionName: !Sub hello-world-sam-create-item-${Stage}
       CodeUri: ./handlers
-      Handler: hello.createItem
+      Handler: hello.createItemHandler
       Role: !GetAtt LambdaExecutionRole.Arn
-      Environment:
-        Variables:
-          FUNCTION_NAME: CreateItem
-          ITEMS_TABLE: !Ref ItemsTable
+      Description: Creates a new item in DynamoDB
       Events:
         HttpEvent:
           Type: Api
@@ -235,21 +225,20 @@ Resources:
             Path: /item
             Method: POST
       Tags:
-        Stage: !Ref Stage
-        Service: HelloWorldService
+        Environment: !Ref Stage
+        Service: HelloWorld
+        Owner: Jason
 
   # Function 7: UpdateItem - DynamoDB Update
+  # 출처: 01-hello-world/serverless.yml functions.updateItem
   UpdateItemFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub hello-world-update-item-${Stage}
+      FunctionName: !Sub hello-world-sam-update-item-${Stage}
       CodeUri: ./handlers
-      Handler: hello.updateItem
+      Handler: hello.updateItemHandler
       Role: !GetAtt LambdaExecutionRole.Arn
-      Environment:
-        Variables:
-          FUNCTION_NAME: UpdateItem
-          ITEMS_TABLE: !Ref ItemsTable
+      Description: Updates an item (PUT method demo)
       Events:
         HttpEvent:
           Type: Api
@@ -258,21 +247,20 @@ Resources:
             Path: /item/{id}
             Method: PUT
       Tags:
-        Stage: !Ref Stage
-        Service: HelloWorldService
+        Environment: !Ref Stage
+        Service: HelloWorld
+        Owner: Jason
 
   # Function 8: DeleteItem - DynamoDB Delete
+  # 출처: 01-hello-world/serverless.yml functions.deleteItem
   DeleteItemFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub hello-world-delete-item-${Stage}
+      FunctionName: !Sub hello-world-sam-delete-item-${Stage}
       CodeUri: ./handlers
-      Handler: hello.deleteItem
+      Handler: hello.deleteItemHandler
       Role: !GetAtt LambdaExecutionRole.Arn
-      Environment:
-        Variables:
-          FUNCTION_NAME: DeleteItem
-          ITEMS_TABLE: !Ref ItemsTable
+      Description: Deletes an item (DELETE method demo)
       Events:
         HttpEvent:
           Type: Api
@@ -281,16 +269,18 @@ Resources:
             Path: /item/{id}
             Method: DELETE
       Tags:
-        Stage: !Ref Stage
-        Service: HelloWorldService
+        Environment: !Ref Stage
+        Service: HelloWorld
+        Owner: Jason
 
   # ============================================
   # DynamoDB Table
+  # 출처: 01-hello-world/serverless.yml resources.Resources.ItemsTable
   # ============================================
   ItemsTable:
     Type: AWS::DynamoDB::Table
     Properties:
-      TableName: !Sub "sam-hello-world-items-${Stage}"
+      TableName: !Sub "hello-world-items-sam-${Stage}"
       BillingMode: PAY_PER_REQUEST
       AttributeDefinitions:
         - AttributeName: id
@@ -301,49 +291,28 @@ Resources:
       StreamSpecification:
         StreamViewType: NEW_AND_OLD_IMAGES
       Tags:
-        - Key: Stage
+        - Key: Environment
           Value: !Ref Stage
         - Key: Service
-          Value: HelloWorldService
+          Value: HelloWorld
 
+  # ============================================
+  # API Gateway
+  # 출처: 01-hello-world/serverless.yml functions[*].events[*].http.cors
+  # ============================================
   HelloWorldApi:
     Type: AWS::Serverless::Api
     Properties:
-      Name: !Sub "hello-world-api-${Stage}"
+      Name: !Sub "hello-world-sam-api-${Stage}"
       StageName: !Ref Stage
-      TracingEnabled: true
-      MethodSettings:
-        - ResourcePath: "/*"
-          HttpMethod: "*"
-          LoggingLevel: INFO
-          DataTraceEnabled: true
-          MetricsEnabled: true
+      Cors:
+        AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
+        AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+        AllowOrigin: "'*'"
       Tags:
-        Stage: !Ref Stage
-        Service: HelloWorldService
-
-  # ============================================
-  # CloudWatch Alarms (선택적)
-  # ============================================
-
-  ApiErrorAlarm:
-    Type: AWS::CloudWatch::Alarm
-    Properties:
-      AlarmName: !Sub "HelloWorldApi-Errors-${Stage}"
-      AlarmDescription: Alert when API Gateway returns 4xx or 5xx errors
-      MetricName: 4XXError
-      Namespace: AWS/ApiGateway
-      Statistic: Sum
-      Period: 300
-      EvaluationPeriods: 1
-      Threshold: 10
-      ComparisonOperator: GreaterThanOrEqualToThreshold
-      Dimensions:
-        - Name: ApiName
-          Value: !Sub "hello-world-api-${Stage}"
-        - Name: Stage
-          Value: !Ref Stage
-      TreatMissingData: notBreaching
+        Environment: !Ref Stage
+        Service: HelloWorld
+        Owner: Jason
 
 Outputs:
   HelloWorldApiEndpoint:
@@ -352,29 +321,17 @@ Outputs:
     Export:
       Name: !Sub "HelloWorldApi-${Stage}-Endpoint"
 
-  SayHelloFunctionArn:
-    Description: ARN of SayHello Lambda function
-    Value: !GetAtt SayHelloFunction.Arn
+  ItemsTableName:
+    Description: DynamoDB Items Table Name
+    Value: !Ref ItemsTable
     Export:
-      Name: !Sub "SayHelloFunction-${Stage}-Arn"
+      Name: !Sub "ItemsTable-${Stage}-Name"
 
-  GreetFunctionArn:
-    Description: ARN of Greet Lambda function
-    Value: !GetAtt GreetFunction.Arn
+  ItemsTableArn:
+    Description: DynamoDB Items Table ARN
+    Value: !GetAtt ItemsTable.Arn
     Export:
-      Name: !Sub "GreetFunction-${Stage}-Arn"
-
-  CreateMessageFunctionArn:
-    Description: ARN of CreateMessage Lambda function
-    Value: !GetAtt CreateMessageFunction.Arn
-    Export:
-      Name: !Sub "CreateMessageFunction-${Stage}-Arn"
-
-  DivideFunctionArn:
-    Description: ARN of Divide Lambda function
-    Value: !GetAtt DivideFunction.Arn
-    Export:
-      Name: !Sub "DivideFunction-${Stage}-Arn"
+      Name: !Sub "ItemsTable-${Stage}-Arn"
 
   LambdaExecutionRoleArn:
     Description: ARN of Lambda Execution Role

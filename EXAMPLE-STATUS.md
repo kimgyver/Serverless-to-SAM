@@ -70,6 +70,8 @@ provider:
 
 **→ `template.yaml` = AWS SAM**
 
+**상태**: ✅ **모든 테스트 완료 (33/33 통과)**
+
 ```yaml
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
@@ -96,16 +98,37 @@ Resources:
     ...
 ```
 
-✅ 배포 가능 (sam deploy)
+**테스트 결과**:
+
+- ✅ AWS Lambda: 8/8 성공
+- ✅ SAM Local: 8/8 성공
+- ✅ LocalStack: 17/17 성공
+- **총**: 33/33 모든 테스트 통과
+
+**배포 명령어**:
+
+```bash
+npm run build        # SAM 빌드
+npm run deploy-dev   # AWS 배포 (us-east-1)
+npm run test:all     # 모든 테스트 실행
+```
 
 **핵심 학습**:
 
 - Parameters: 배포 시 입력값 (Stage=dev, prod 등)
 - Globals: 모든 함수 공통 설정
 - IAM Role: 명시적 권한 정의
-- CloudWatch Alarms: 에러 모니터링
+- Path Parameters: `/divide/{a}/{b}` 경로 파라미터 처리
+- 3가지 테스트 환경: AWS Lambda, SAM Local, LocalStack
 
-**상세 가이드**: [examples/03-hello-world-sam/README.md](./examples/03-hello-world-sam/README.md) (약 600줄)
+**변환 포인트** (vs 01-hello-world):
+
+- `functions.xxx` → `Resources.XxxFunction`
+- `events.http` → `Events` 객체
+- `path` + `method` → `Properties.Events.HttpApi.Path/Method`
+- `provider.iam` → 명시적 `LambdaExecutionRole` 리소스
+
+**상세 가이드**: [examples/03-hello-world-sam/README.md](./examples/03-hello-world-sam/README.md)
 
 ---
 

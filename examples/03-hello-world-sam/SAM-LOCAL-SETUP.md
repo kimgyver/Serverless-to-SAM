@@ -1,8 +1,11 @@
 # SAM Local Development Setup Guide
 
-> **참고**: SAM Local의 3가지 핵심 변경사항에 대한 상세 설명은 [SAM-LOCAL-AWS-DYNAMODB-FIX.md](./SAM-LOCAL-AWS-DYNAMODB-FIX.md)를 참고하세요.
+> **완료 상태**: ✅ 모든 설정 완료 및 테스트 통과 (33/33)
+> **마지막 업데이트**: 2025-12-30
 
 이 가이드는 SAM Local을 사용하여 AWS DynamoDB와 연동하여 로컬에서 Lambda 함수를 테스트하는 **단계별 실행 방법**을 설명합니다.
+
+> **참고**: SAM Local의 3가지 핵심 변경사항에 대한 상세 설명은 [SAM-LOCAL-AWS-DYNAMODB-FIX.md](./SAM-LOCAL-AWS-DYNAMODB-FIX.md)를 참고하세요.
 
 ## 📋 전제 조건
 
@@ -11,6 +14,18 @@
 - ✅ Docker 설치
 - ✅ SAM CLI 설치
 - ✅ Node.js 18.x 이상
+
+## ⚡ 빠른 시작 (모든 테스트 한 번에)
+
+```bash
+# 1. LocalStack 실행
+docker-compose up -d
+
+# 2. 모든 테스트 실행 (33/33 성공)
+npm run test:all
+```
+
+---
 
 ## 🔑 1단계: IAM 권한 설정
 
@@ -52,7 +67,7 @@ grep 'region:' handlers/hello.js
 # 출력 예: const dynamodbConfig = { region: "us-east-1" }
 
 # 3. DynamoDB 테이블 존재 확인
-aws dynamodb describe-table --table-name sam-hello-world-items-dev
+aws dynamodb describe-table --table-name hello-world-items-dev
 ```
 
 ## 🚀 3단계: SAM Local 실행
@@ -80,6 +95,8 @@ AWS_REGION=us-east-1 sam local invoke CreateItemFunction \
 EOF
 ```
 
+````
+
 **예상 응답:**
 
 ```json
@@ -94,7 +111,7 @@ EOF
     "stage": "dev"
   }
 }
-```
+````
 
 #### ListItems 함수 테스트
 

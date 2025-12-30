@@ -53,12 +53,12 @@ const tests = [
     function: "DivideFunction",
     type: "일반",
     event: {
-      body: JSON.stringify({
-        dividend: 100,
-        divisor: 4
-      }),
-      httpMethod: "POST",
-      path: "/divide"
+      httpMethod: "GET",
+      path: "/divide/100/4",
+      pathParameters: {
+        a: "100",
+        b: "4"
+      }
     }
   },
   {

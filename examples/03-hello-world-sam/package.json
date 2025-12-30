@@ -7,7 +7,7 @@
     "test": "npm run test:localstack",
     "test:localstack": "AWS_REGION=us-west-2 ITEMS_TABLE=sam-hello-world-items-local DYNAMODB_ENDPOINT=http://localhost:4566 node test/localstack.test.js",
     "test:sam-local": "node test/sam-local.test.js",
-    "test:aws-lambda": "bash -c 'ENDPOINT=$(aws cloudformation describe-stacks --stack-name hello-world-sam-dev --region us-west-2 --query \"Stacks[0].Outputs[0].OutputValue\" --output text 2>/dev/null) && if [ ! -z \"$ENDPOINT\" ] && [ \"$ENDPOINT\" != \"None\" ]; then export API_ENDPOINT=\"$ENDPOINT\" && bash test/aws-lambda.test.sh; else echo \"❌ API endpoint not found. Deploy the stack first: npm run deploy-dev\"; exit 1; fi'",
+    "test:aws-lambda": "bash -c 'ENDPOINT=$(aws cloudformation describe-stacks --stack-name hello-world-sam-dev --region us-east-1 --query \"Stacks[0].Outputs[0].OutputValue\" --output text 2>/dev/null) && if [ ! -z \"$ENDPOINT\" ] && [ \"$ENDPOINT\" != \"None\" ]; then export API_ENDPOINT=\"$ENDPOINT\" && bash test/aws-lambda.test.sh; else echo \"❌ API endpoint not found. Deploy the stack first: npm run deploy-dev\"; exit 1; fi'",
     "test:all": "npm run test:localstack && npm run test:sam-local && npm run test:aws-lambda",
     "build": "sam build",
     "deploy": "sam deploy --guided",

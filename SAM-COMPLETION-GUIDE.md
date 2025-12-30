@@ -1,17 +1,22 @@
 # 📚 Week 2-3 SAM 학습 완료 요약
 
+**완료 상태**: ✅ 100% 완료 + 모든 테스트 통과 🎉
+
+---
+
 ## 🎉 생성된 SAM 예제 & 가이드
 
 ### ✅ 생성된 것들 (Phase 2: Week 2-3)
 
-#### 1. SAM 예제 2개
+#### 1. SAM 예제 (03-hello-world-sam 완료)
 
 **3️⃣ examples/03-hello-world-sam/**
 
-- 파일: `template.yaml`, `handlers/hello.js`, `package.json`
+- 파일: `template.yaml`, `handlers/hello.js`, `package.json`, `samconfig.toml`
 - 가이드: `README.md` (~600줄, 상세 튜토리얼)
-- 핵심: Parameters, Globals, IAM Role, CloudWatch Alarms
-- 배포: `sam deploy --guided`
+- 핵심: Parameters, Globals, IAM Role, API Gateway, DynamoDB
+- 배포: `npm run deploy-dev` (us-east-1)
+- **테스트**: ✅ 33/33 성공 (AWS Lambda 8/8, SAM Local 8/8, LocalStack 17/17)
 
 **4️⃣ examples/04-api-gateway-s3-sam/**
 
@@ -19,6 +24,7 @@
 - 가이드: `README.md` (~700줄, 상세 튜토리얼)
 - 핵심: S3 버킷, IAM Policy, Pre-signed URL, S3 이벤트
 - 배포: `sam deploy --guided`
+- **상태**: 구조 완성, 테스트 대기
 
 #### 2. 마이그레이션 가이드
 
@@ -26,14 +32,15 @@
 
 - Phase 1: 기존 serverless.yml 분석
 - Phase 2: template.yaml 생성 (섹션별)
-- Phase 3: 로컬 테스트
+- Phase 3: 로컬 테스트 (SAM Local, LocalStack)
 - Phase 4: AWS 배포
-- 공통 패턴 & FAQ
+- 공통 패턴 & FAQ (경로 파라미터, DynamoDB 설정 등)
 
 #### 3. 업데이트된 문서
 
 - `README.md`: 주요 개념 섹션 추가
-- `EXAMPLE-STATUS.md`: Phase 2 완료 표시
+- `EXAMPLE-STATUS.md`: Phase 2 완료, 테스트 결과 추가
+- `00-FINAL-STATUS.md`: 최종 완성 상태 반영
 
 ---
 
