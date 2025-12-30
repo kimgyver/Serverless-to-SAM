@@ -441,6 +441,151 @@ aws logs tail /aws/lambda/my-service-dev-myFunction --follow
 
 ---
 
+## 🚀 SAM (Week 2-3) 빠른 참고
+
+### template.yaml 기본 구조
+
+```yaml
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+
+Parameters:
+  Stage:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, staging, prod]
+
+Globals:
+  Function:
+    Runtime: nodejs18.x
+    Timeout: 10
+    MemorySize: 128
+    Environment:
+      Variables:
+        STAGE: !Ref Stage
+        SERVICE_NAME: my-service
+
+Resources:
+  MyFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: handlers/
+      Handler: index.handler
+      Events:
+        GetEvent:
+          Type: Api
+          Properties:
+            Path: /path
+            Method: GET
+            RestApiId: !Ref MyApi
+
+  MyApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: !Ref Stage
+
+  MyTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "my-table-${Stage}"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+
+Outputs:
+  ApiEndpoint:
+    Value: !Sub "https://${MyApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}"
+  TableName:
+    Value: !Ref MyTable
+```
+
+### 📝 `.env.json` vs `samconfig.toml` 빠른 정리
+
+#### `.env.json` - 로컬 함수 환경변수
+
+```json
+{
+  "FunctionName": {
+    "ITEMS_TABLE": "hello-world-items-dev",
+    "STAGE": "dev",
+    "LOG_LEVEL": "INFO"
+  }
+}
+```
+
+**사용:**
+
+```bash
+sam local invoke FunctionName --env-vars .env.json
+sam local start-api --env-vars .env.json
+```
+
+**핵심:** SAM Local이 CloudFormation 변수 치환을 완벽히 지원하지 않아서 필요함
+
+---
+
+#### `samconfig.toml` - 배포 설정
+
+```toml
+version = 0.1
+
+[default.deploy.parameters]
+stack_name = "hello-world-sam-dev"
+region = "us-east-1"
+capabilities = "CAPABILITY_NAMED_IAM"
+parameter_overrides = "Stage=dev Environment=development"
+resolve_s3 = true
+
+[dev.deploy.parameters]
+stack_name = "hello-world-sam-dev"
+region = "us-east-1"
+
+[prod.deploy.parameters]
+stack_name = "hello-world-sam-prod"
+region = "us-east-1"
+parameter_overrides = "Stage=prod Environment=production"
+```
+
+**사용:**
+
+```bash
+sam deploy --config-env dev
+sam deploy --config-env prod
+```
+
+**핵심:** 반복되는 배포 옵션을 저장하고 환경별 설정 관리
+
+---
+
+### SAM CLI 명령어
+
+| 명령                  | 용도             | 예                                                   |
+| --------------------- | ---------------- | ---------------------------------------------------- |
+| `sam init`            | 프로젝트 생성    | `sam init --runtime nodejs18.x`                      |
+| `sam build`           | 함수 코드 준비   | `sam build`                                          |
+| `sam local invoke`    | 로컬 함수 테스트 | `sam local invoke FunctionName --env-vars .env.json` |
+| `sam local start-api` | 로컬 API 서버    | `sam local start-api --port 3000`                    |
+| `sam deploy`          | AWS 배포         | `sam deploy --config-env dev`                        |
+| `sam deploy --guided` | 첫 배포 (대화형) | `sam deploy --guided`                                |
+| `sam delete`          | 스택 삭제        | `sam delete --stack-name my-stack`                   |
+
+### Serverless vs SAM 매핑
+
+| 기능   | Serverless                   | SAM                                                |
+| ------ | ---------------------------- | -------------------------------------------------- |
+| 파일   | serverless.yml               | template.yaml                                      |
+| 함수   | functions.name               | Resources.FunctionName (AWS::Serverless::Function) |
+| IAM    | provider.iam.role.statements | Resources.FunctionRole (AWS::IAM::Role)            |
+| API GW | functions.events.http        | Resources.Api (AWS::Serverless::Api)               |
+| 배포   | serverless deploy            | sam deploy                                         |
+| 로컬   | serverless local             | sam local invoke / sam local start-api             |
+
+---
+
 ## 📌 Serverless vs SAM 맵핑 시작
 
 | 기능   | Serverless                   | SAM                                                |

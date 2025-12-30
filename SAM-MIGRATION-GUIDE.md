@@ -479,6 +479,111 @@ env.json:
 
 ---
 
+## 🔄 중요: .env.json vs samconfig.toml 차이
+
+### ⚡ 빠른 정리
+
+| 항목          | `.env.json`                             | `samconfig.toml`              |
+| ------------- | --------------------------------------- | ----------------------------- |
+| **역할**      | 런타임 환경변수 관리                    | 배포 설정 저장                |
+| **적용 범위** | SAM Local 함수 실행                     | CloudFormation 배포           |
+| **형식**      | JSON (함수별 분리)                      | TOML (환경별 섹션)            |
+| **사용 명령** | `sam local invoke --env-vars .env.json` | `sam deploy --config-env dev` |
+| **필수여부**  | SAM Local 테스트 시 필수                | 배포 시 필수                  |
+
+### `.env.json` - 로컬 개발 환경변수
+
+**왜 필요한가?**
+
+- SAM Local은 CloudFormation의 동적 변수 치환을 완벽하게 지원하지 않음
+- `template.yaml`의 `Environment.Variables`가 컨테이너에서 제대로 전달되지 않음
+- 로컬 테스트 시 명시적으로 환경변수를 제공해야 함
+
+**구조:**
+
+```json
+{
+  "FunctionName": {
+    "ENV_VAR1": "value1",
+    "ENV_VAR2": "value2"
+  },
+  "AnotherFunction": {
+    "ENV_VAR1": "different_value"
+  }
+}
+```
+
+**실제 예:**
+
+```json
+{
+  "ListItemsFunction": {
+    "ITEMS_TABLE": "hello-world-items-dev",
+    "STAGE": "dev",
+    "LOG_LEVEL": "INFO"
+  },
+  "CreateItemFunction": {
+    "ITEMS_TABLE": "hello-world-items-dev",
+    "STAGE": "dev",
+    "LOG_LEVEL": "INFO"
+  }
+}
+```
+
+**사용:**
+
+```bash
+# SAM Local 함수 테스트
+sam local invoke ListItemsFunction --env-vars .env.json --event -
+
+# SAM Local API 서버 실행
+sam local start-api --env-vars .env.json --port 3000
+```
+
+### `samconfig.toml` - 배포 설정 저장소
+
+**왜 필요한가?**
+
+- CloudFormation 배포 시 반복되는 옵션들을 저장
+- 환경별(dev/staging/prod) 다른 설정을 효율적으로 관리
+- `sam deploy` 명령을 간단하게 함
+
+**구조:**
+
+```toml
+[default.deploy.parameters]
+# 모든 환경의 기본 설정
+
+[dev.deploy.parameters]
+# dev 환경 전용 설정
+
+[prod.deploy.parameters]
+# prod 환경 전용 설정
+```
+
+**저장 항목:**
+
+```toml
+stack_name = "hello-world-sam-dev"           # CloudFormation 스택 이름
+region = "us-east-1"                         # 배포 리전
+capabilities = "CAPABILITY_NAMED_IAM"        # IAM 권한 허용
+parameter_overrides = "Stage=dev"            # template.yaml의 Parameters 전달값
+resolve_s3 = true                            # 자동 S3 버킷 생성
+confirm_changeset = false                    # 변경사항 자동 승인
+```
+
+**사용:**
+
+```bash
+# samconfig.toml의 설정으로 배포
+sam deploy --config-env dev
+
+# 또는 기본값 사용
+sam deploy
+```
+
+---
+
 ## Phase 4: AWS 배포
 
 ### Step 4.1: samconfig.toml 생성
